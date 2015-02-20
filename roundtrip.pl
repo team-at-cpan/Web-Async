@@ -29,7 +29,7 @@ $loop->add(
 );
 my $resp = $cli->GET(
 	'https://' . $host . ':' . $port . '/some/page.html?x=123&y=abcd'
-)->get;
+)->http_response->get;
 isa_ok($resp, 'HTTP::Response');
 ok($resp->is_success, 'had success');
 is($resp->code, 200, 'status code 200');
