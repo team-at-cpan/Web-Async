@@ -13,6 +13,16 @@ Web::Async -
 
 =head1 DESCRIPTION
 
+=head2 request
+
+Takes the following named parameters:
+
+=over 4
+
+=item * version - the HTTP version string, defaults to HTTP/1.1
+
+=item *  ...
+
 =cut
 
 use Web::Async::Client;
