@@ -55,14 +55,14 @@ Returns a list of the protocols we will attempt to negotiate via ALPN.
 =cut
 
 sub alpn_protocols {
-	Web::Async::Protocol::HTTP2->alpn_identifiers,
+#	Web::Async::Protocol::HTTP2->alpn_identifiers,
 	Protocol::SPDY->alpn_identifiers,
 	'http'
 }
 
 sub listen {
 	my ($self) = @_;
-	my $uri; 
+	my $uri;
 	my $f = $self->loop->new_future;
 	retain_future(
 		$self->loop->SSL_listen(
@@ -77,8 +77,13 @@ sub listen {
 			on_accept => sub {
 				my $sock = shift;
 				my $proto = $sock->alpn_selected;
-				print "Connected to " . join(':', $sock->peerhost, $sock->peerport) . ", we're using " . $proto . "\n";
+				my $connection_key = join(':', (map { $sock->$_ } qw(peerhost peerport sockhost sockport)), Scalar::Util::refaddr($sock));
+				print "Connection from " . $connection_key . " using " . $proto . "\n";
 				my $handler = $self->handler_for($proto);
+				my $stream = IO::Async::Stream->new(handle => $sock);
+				$handler->on_stream($stream);
+				$self->{handler_for_connection}{$connection_key} = $handler;
+				$self->add_child($stream);
 			},
 			on_listen => sub {
 				my $sock = shift;
@@ -88,6 +93,14 @@ sub listen {
 		)->on_fail(sub { $f->fail(@_) })
 	);
 	$f
+}
+
+sub configure {
+	my ($self, %args) = @_;
+	for(qw(protocols)) {
+		$self->{$_} = delete $args{$_} if exists $args{$_};
+	}
+	$self->SUPER::configure(%args);
 }
 
 1;
