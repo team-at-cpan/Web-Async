@@ -60,6 +60,7 @@ One side effect of the bandwidth controls is that we are able to track and repor
 =cut
 
 use Log::Any qw($log);
+use Variable::Disposition qw(retain_future);
 
 use Protocol::SPDY;
 use Protocol::UWSGI;
@@ -67,6 +68,9 @@ use Protocol::UWSGI;
 use Web::Async::Protocol::HTTP1;
 use Web::Async::Protocol::HTTP2;
 use Web::Async::Protocol::HTTP2::Client;
+use Web::Async::Protocol::SPDY::Client;
+
+use Web::Async::Request;
 
 use HTTP::Request;
 use HTTP::Response;
@@ -81,6 +85,10 @@ sub handler_for {
 	my ($self, $proto) = @_;
 	if($proto eq 'h2c-16') {
 		return Web::Async::Protocol::HTTP2::Client->new
+	} elsif($proto eq 'spdy/3.1') {
+		return Web::Async::Protocol::SPDY::Client->new
+	} elsif($proto eq 'http') {
+		return Web::Async::Protocol::HTTP1::Client->new
 	}
 	...
 }
@@ -92,50 +100,84 @@ Returns a list of the protocols we will attempt to negotiate via ALPN.
 =cut
 
 sub alpn_protocols {
-	Web::Async::Protocol::HTTP2->alpn_identifiers,
-	Protocol::SPDY->alpn_identifiers,
-	'http'
+	my ($self) = shift;
+	$self->{alpn_protocols} //= [
+		Web::Async::Protocol::HTTP2->alpn_identifiers,
+		Protocol::SPDY->alpn_identifiers,
+		'http'
+	];
+	@{$self->{alpn_protocols}}
 }
 
-sub connect {
-	my ($self, $uri) = @_;
+sub expand_args {
+	my ($self, $args) = @_;
+	$args->{uri} = URI->new($args->{uri}) unless ref $args->{uri};
+	$args->{host} //= $args->{uri}->host;
+	$args->{port} //= $args->{uri}->port // ($args->{uri}->scheme eq 'http' ? 80 : 443);
+	$args
+}
 
-	$self->loop->SSL_connect(
-		socktype => "stream",
-		host     => $uri->host,
-		service     => $uri->port || 'https',
-		SSL_alpn_protocols => [ $self->alpn_protocols ],
-		SSL_version => 'TLSv12',
-		SSL_verify_mode => SSL_VERIFY_NONE,
-		on_connected => sub {
-			my $sock = shift;
-			my $proto = $sock->alpn_selected;
-			print "Connected to " . join(':', $sock->peerhost, $sock->peerport) . ", we're using " . $proto . "\n";
-			my $handler = $self->handler_for($proto);
-			$handler->on_stream(
-				my $stream = IO::Async::Stream->new(
-					handle => $sock
-				)
-			);
-			$self->add_child($stream);
-		},
-		on_ssl_error => sub { die "ssl error: @_"; },
-		on_connect_error => sub { die "conn error: @_"; },
-		on_resolve_error => sub { die "resolve error: @_"; },
-		on_listen => sub {
-			my $sock = shift;
-			my $port = $sock->sockport;
-			print "Listening on port $port\n";
-		},
+sub connection_key {
+	my ($self, %args) = @_;
+	$self->expand_args(\%args);
+	join "\0", $args{host}, $args{port};
+}
+
+sub connection {
+	my ($self, %args) = @_;
+	$self->expand_args(\%args);
+
+	my $f = $self->loop->new_future;
+	retain_future(
+		$self->loop->SSL_connect(
+			socktype => "stream",
+			host     => $args{host},
+			service  => $args{port},
+			SSL_alpn_protocols => [ $self->alpn_protocols ],
+			SSL_version => 'TLSv12',
+			SSL_verify_mode => SSL_VERIFY_NONE,
+			on_connected => sub {
+				my $sock = shift;
+				my $proto = $sock->alpn_selected;
+				my $connection_key = join(':', (map { $sock->$_ } qw(peerhost peerport sockhost sockport)), Scalar::Util::refaddr($sock));
+				$log->debugf("Connected to %s:%d using protocol %s", $sock->peerhost, $sock->peerport, $proto);
+				my $handler = $self->handler_for($proto);
+				$handler->on_stream(
+					my $stream = IO::Async::Stream->new(
+						handle => $sock
+					)
+				);
+				$self->{handler_for_connection}{$connection_key} = $handler;
+				$self->add_child($stream);
+				$f->done($handler);
+			},
+		)->on_fail(sub { $f->fail(@_) })
 	);
+	$f
 }
 
 sub GET {
 	my ($self, $uri, %args) = @_;
 	$uri = URI->new($uri) unless ref $uri;
-	$self->connect(
-		$uri
+	$args{uri} = $uri;
+
+	my $req = Web::Async::Request->new(
+		new_future => sub { $self->loop->new_future },
+		%args,
 	);
+	retain_future(
+		$self->connection(%args)->then(sub {
+			my ($conn) = @_;
+			eval {
+				$log->debugf("Connection [%s]", "$conn");
+				$conn->request($req);
+			} or do {
+				$log->errorf("Exception - %s", $@);
+				$req->fail($@)
+			}
+		})
+	);
+	$req
 }
 
 1;
