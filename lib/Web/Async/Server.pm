@@ -12,6 +12,7 @@ use Protocol::UWSGI;
 
 use Web::Async::Protocol::HTTP1;
 use Web::Async::Protocol::HTTP2;
+use Web::Async::Protocol::SPDY::Server;
 
 use HTTP::Request;
 use HTTP::Response;
@@ -41,6 +42,8 @@ sub handler_for {
 	my ($self, $proto) = @_;
 	if($proto eq 'h2c-16') {
 		return Web::Async::Protocol::HTTP2::Server->new
+	} elsif($proto eq 'spdy/3.1') {
+		return Web::Async::Protocol::SPDY::Server->new
 	}
 	...
 }
