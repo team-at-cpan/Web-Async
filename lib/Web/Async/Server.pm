@@ -68,7 +68,7 @@ sub listen {
 		$self->loop->SSL_listen(
 			socktype => 'stream',
 			host => 'localhost',
-			service => 0,
+			service => $self->port // 0,
 			SSL_alpn_protocols => [ $self->alpn_protocols ],
 			SSL_version => 'TLSv12',
 			SSL_verify_mode => SSL_VERIFY_NONE,
@@ -95,9 +95,11 @@ sub listen {
 	$f
 }
 
+sub port { shift->{port} }
+
 sub configure {
 	my ($self, %args) = @_;
-	for(qw(protocols)) {
+	for(qw(protocols port)) {
 		$self->{$_} = delete $args{$_} if exists $args{$_};
 	}
 	$self->SUPER::configure(%args);
