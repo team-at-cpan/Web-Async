@@ -86,6 +86,9 @@ sub listen {
 			on_accept => sub {
 				my $sock = shift;
 				my $proto = $sock->alpn_selected;
+				# no ALPN? could fall back to NPN, but it's unlikely to be around long enough to be worthwhile,
+				# so we'll drop down to https instead
+				$proto //= 'https';
 				my $connection_key = join(':', (map { $sock->$_ } qw(peerhost peerport sockhost sockport)), Scalar::Util::refaddr($sock));
 				print "Connection from " . $connection_key . " using " . $proto . "\n";
 				my $handler = $self->handler_for($proto);
