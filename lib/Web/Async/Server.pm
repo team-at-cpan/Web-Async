@@ -29,7 +29,8 @@ sub alpn_callback {
 	Net::SSLeay->set_alpn_select_cb(sub {
 		my ($ctx, $client_supports) = @_;
 		my %proto = map {; $_ => 1 } @$client_supports;
-		return 'h2c-16' if exists $proto{'h2c-16'};
+		return 'h2-16' if exists $proto{'h2-16'};
+		return 'h2-14' if exists $proto{'h2-14'};
 		return 'spdy/3.1' if exists $proto{'spdy/3.1'};
 		return 'spdy/3' if exists $proto{'spdy/3'};
 		return 'https' if exists $proto{'https'};
@@ -40,7 +41,11 @@ sub alpn_callback {
 
 sub handler_for {
 	my ($self, $proto) = @_;
-	if($proto eq 'h2c-16') {
+	if($proto eq 'h2') {
+		return Web::Async::Protocol::HTTP2::Server->new
+	} elsif($proto eq 'h2-16') {
+		return Web::Async::Protocol::HTTP2::Server->new
+	} elsif($proto eq 'h2-14') {
 		return Web::Async::Protocol::HTTP2::Server->new
 	} elsif($proto eq 'spdy/3.1') {
 		return Web::Async::Protocol::SPDY::Server->new
@@ -55,9 +60,13 @@ Returns a list of the protocols we will attempt to negotiate via ALPN.
 =cut
 
 sub alpn_protocols {
-#	Web::Async::Protocol::HTTP2->alpn_identifiers,
-	Protocol::SPDY->alpn_identifiers,
-	'http'
+	@{
+		shift->{protocols} ||= [
+#			Web::Async::Protocol::HTTP2->alpn_identifiers,
+			Protocol::SPDY->alpn_identifiers,
+			'http'
+		]
+	}
 }
 
 sub listen {

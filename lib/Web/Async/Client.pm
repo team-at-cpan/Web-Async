@@ -95,11 +95,17 @@ use URI;
 
 sub handler_for {
 	my ($self, $proto) = @_;
-	if($proto eq 'h2c-16') {
+	if($proto eq 'h2') {
+		return Web::Async::Protocol::HTTP2::Client->new
+	} elsif($proto eq 'h2-16') {
+		return Web::Async::Protocol::HTTP2::Client->new
+	} elsif($proto eq 'h2-14') {
 		return Web::Async::Protocol::HTTP2::Client->new
 	} elsif($proto eq 'spdy/3.1') {
 		return Web::Async::Protocol::SPDY::Client->new
 	} elsif($proto eq 'http') {
+		return Web::Async::Protocol::HTTP1::Client->new
+	} elsif($proto eq 'https') {
 		return Web::Async::Protocol::HTTP1::Client->new
 	}
 	...
@@ -111,14 +117,24 @@ Returns a list of the protocols we will attempt to negotiate via ALPN.
 
 =cut
 
+#sub alpn_protocols {
+#	my ($self) = shift;
+#	$self->{alpn_protocols} //= [
+#		Web::Async::Protocol::HTTP2->alpn_identifiers,
+#		Protocol::SPDY->alpn_identifiers,
+#		'http'
+#	];
+#	@{$self->{alpn_protocols}}
+#}
+
 sub alpn_protocols {
-	my ($self) = shift;
-	$self->{alpn_protocols} //= [
-		Web::Async::Protocol::HTTP2->alpn_identifiers,
-		Protocol::SPDY->alpn_identifiers,
-		'http'
-	];
-	@{$self->{alpn_protocols}}
+	@{
+		shift->{protocols} ||= [
+			Web::Async::Protocol::HTTP2->alpn_identifiers,
+			Protocol::SPDY->alpn_identifiers,
+			'http'
+		]
+	}
 }
 
 =head2 expand_args
