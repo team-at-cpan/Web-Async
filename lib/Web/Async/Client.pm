@@ -53,6 +53,18 @@ the queue for one host that will need to be processed before requests for other 
 
 =head2 Bandwidth limits
 
+Per-host rates apply to data sent/received from a host:port combination.
+
+Per-request rates affect requests - for multiplexed requests such as HTTP2, these can be used to distribute
+the traffic within a single TCP connection.
+
+Bytes-on-wire
+
+Body without encoding - this looks at the data we see after any encoding layers have been removed, so for
+gzip this would be decompressed
+
+Body after encoding - this represents the body bytes on the wire, but without any framing overhead
+
 =head2 Accounting
 
 One side effect of the bandwidth controls is that we are able to track and report usage.
@@ -109,6 +121,12 @@ sub alpn_protocols {
 	@{$self->{alpn_protocols}}
 }
 
+=head2 expand_args
+
+Extrapolate information from common parameters.
+
+=cut
+
 sub expand_args {
 	my ($self, $args) = @_;
 	$args->{uri} = URI->new($args->{uri}) unless ref $args->{uri};
@@ -156,8 +174,17 @@ sub connection {
 	$f
 }
 
+=head2 GET
+
+Starts a GET request for the given URL.
+
+Returns a L<Web::Async::Request>.
+
+=cut
+
 sub GET {
 	my ($self, $uri, %args) = @_;
+
 	$uri = URI->new($uri) unless ref $uri;
 	$args{uri} = $uri;
 
@@ -165,6 +192,7 @@ sub GET {
 		new_future => sub { $self->loop->new_future },
 		%args,
 	);
+
 	retain_future(
 		$self->connection(%args)->then(sub {
 			my ($conn) = @_;
@@ -177,6 +205,7 @@ sub GET {
 			}
 		})
 	);
+
 	$req
 }
 
