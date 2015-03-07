@@ -45,62 +45,35 @@ Web::Async - provides server/client support for some typical web-related activit
 
 =head1 DESCRIPTION
 
+This is an L<IO::Async> client/server implementation for HTTP-related protocols. It provides
+support for plaintext or TLS-encrypted requests using HTTP/1.1, HTTP/2, SPDY/3.1
+or other gateway protocols such as PSGI, CGI, FastCGI or UWSGI.
+It provides much of the functionality typically found in L<LWP::UserAgent> or C< curl >, but
+using an async API based mainly on L<Future>s.
+
 =head2 Features
 
 =over 4
 
 =item * Protocol selection - client/server will autonegotiate a suitable transport protocol (HTTP2, SPDY, HTTP1.1)
 
- $web->listen('*')->then(sub {
-  $web->GET('https://localhost')->protocol->then(sub {
-   my ($proto) = @_;
-   print "Protocol: " . $proto . "\n";
-   Future->done
-  });
- })->get;
+# EXAMPLE: examples/pod/01-protocol-selection.pl
 
 =item * TLS - client/server cert, ALPN
 
- $web->listen('https://some.example.com')->then(sub {
-  $web->GET('https://localhost')->tls->then(sub {
-   my ($tls) = @_;
-   print "Domain:      " . $tls->sni . "\n";
-   print "Server cert: " . $tls->server_cert . "\n";
-   print "Client cert: " . $tls->client_cert . "\n";
-   print "ALPN:        " . join(',', $tls->alpn_protocols) . "\n";
-   Future->done
-  });
- })->get;
+# EXAMPLE: examples/pod/02-tls-alpn.pl
 
 =item * DANE - certs from DNS
 
- $loop->add(
-  my $dns = Net::Async::DNS->new
- );
- $loop->add(
-  my $web = Web::Async->new
- );
- my $uri = URI->new('https://dane-test.example.com');
- Future->needs_all(
-  $web->listen($uri),
-  $dns->listen('udp://*:0')
- )->then(sub {
-  my ($http_srv, $dns_srv) = @_;
-  $loop->set_resolver($dns_srv->resolver);
-  $dns_srv->add_server($http_srv)
- })->then(sub {
-  $web->GET($uri)->tls->on_done(sub {
-   my ($tls) = @_;
-   print "Domain:      " . $tls->sni . "\n";
-   print "Server cert: " . $tls->server_cert . "\n";
-   print "Client cert: " . $tls->client_cert . "\n";
-   print "ALPN:        " . join(',', $tls->alpn_protocols) . "\n";
-  });
- })->get;
+# EXAMPLE: examples/pod/03-dane.pl
 
 =item * Timeout - per-request timeout configuration
 
+# EXAMPLE: examples/pod/04-timeout.pl
+
 =item * Encoding - gzip/zlib compression will be applied by default if the other side understands it
+
+# EXAMPLE: examples/pod/05-encoding.pl
 
 =item * Bandwidth/usage limiting - request accounting and rules support limits per host/key with various
 restriction and backoff policies
@@ -117,15 +90,15 @@ Transport-layer protocol implementations are from the following modules:
 
 =over 4
 
-=item * L<Protocol::HTTP::V1_1> - implements the protocol as described in RFC2616 and subsequently updated in RFC7230-RFC7236
+=item * L<Protocol::HTTP::V1_1> - implements HTTP/1.1 as described in RFC2616 and subsequently updated in RFC7230-RFC7236
 
-=item * L<Protocol::HTTP::V2_0> - implements SPDY/4 / HTTP2
+=item * L<Protocol::HTTP::V2_0> - implements HTTP/2.0 (what Chrome describes as SPDY/4)
 
 =item * L<Protocol::HTTP::SPDY3_1> - implements SPDY/3.1
 
 =item * L<Protocol::UWSGI> - implements UWSGI
 
-=item * L<Protocol::CGI> - implements CGI
+=item * L<Protocol::CGI> - implements CGI as described in RFC3875
 
 =back
 
@@ -192,11 +165,13 @@ Forward requests to a simple PSGI coderef:
 
 Streaming PSGI:
 
+ my $input = $loop->new_from_stdin;
  $web->listen(
   'http://*',
   psgi => sub {
    my ($env) = @_;
    die "no streaming' unless $env->{'psgi.streaming'};
+   my $file = '...';
    sub {
     my ($responder) = @_;
     my $writer = $responder->([ 200, [ 'Content-Type' => 'video/mpeg4' ]]);
@@ -212,6 +187,14 @@ Streaming PSGI:
     );
    }
   }
+ )->get;
+
+which could also be written as:
+
+ my $input = $loop->new_from_stdin;
+ $web->listen(
+  'http://*',
+  psgi => $web->psgi_from_stream($input),
  );
 
 =head3 HTTP proxy
@@ -243,7 +226,7 @@ be delivered in full to both servers (unless the client bails out early).
 Send each request to a UWSGI endpoint:
 
  $web->listen(
-  'http://static.example.com',
+  'uwsgi.example.com',
   uwsgi => 'unix:///tmp/uwsgi.sock',
  );
 
@@ -252,7 +235,7 @@ Send each request to a UWSGI endpoint:
 Send each request to a FastCGI server:
 
  $web->listen(
-  'http://static.example.com',
+  'fastcgi.example.com',
   fastcgi => 'unix:///tmp/fastcgi.sock',
  );
 
@@ -261,7 +244,7 @@ Send each request to a FastCGI server:
 Static files can be served from a directory:
 
  $web->listen(
-  'http://static.example.com',
+  'static.example.com',
   directory => '/var/www/example.com/htdocs',
  );
 
@@ -269,7 +252,7 @@ Missing files will present a 404 error, basic directory listing (+read-only DAV 
 Full write access is enabled with the C< dav > option:
 
  $web->listen(
-  'http://static.example.com',
+  'webdav.example.com',
   directory => '/var/www/example.com/writable',
   dav => 1,
  );
@@ -283,7 +266,7 @@ Add these lines to /etc/torrc:
  HiddenServiceDir /opt/tor/hidden_service/
  HiddenServicePort 80 127.0.0.1:8080
 
-Once tor has restarted with the new config and generated a key for the hidden service:
+Once tor has restarted with the new config (and generated a key if necessary) for the hidden service:
 
  chomp(
   my $host = do { local (@ARGV, $/) = '/opt/tor/hidden_service/hostname'; <> }
@@ -305,6 +288,14 @@ Example tor site:
  )->get;
 
 =head2 Sending requests
+
+A typical request takes the form
+
+ $web->METHOD($uri)
+
+as in:
+
+ $web->GET('https://www.google.com')->response->to_stream($loop->new_for_stdout)->get;
 
 HTTP client methods mostly correspond to the HTTP verb:
 
@@ -454,68 +445,28 @@ Some more cases:
 
 =head2 Proxy
 
-Blindly accept incoming requests, acting as proxy for http1/http2 on ports :80 and :443:
+Blindly accept incoming requests, acting as proxy for http1/http2 on ports 80 and 443:
 
- $web->listen(
-  'localhost'
-  on_request => sub {
-   my ($req) = shift;
-   warn $req->method . " " . $req->uri . "\n";
-   (my $host = lc $req->authority) =~ s/:\s*(\d+)\s*$//;
-   return $req->refuse('localhost denied') if $host eq 'localhost';
-   $req->respond($web->request($req))
-  }
- )->then(sub {
-  my ($srv) = @_;
-  $loop->new_future
- })->get;
+# EXAMPLE: examples/pod/http-proxy.pl
 
 =head2 PUT from file
 
 On some platforms, using a file name or handle to send data can be optimised by the sendfile()
 operation. Other platforms will just use the standard read/write pair.
 
- $web->listen(
-  'localhost',
-  directory => File::Temp::tempdir(),
-  allow_upload => 1,
- )->then(sub {
-  my ($srv) = @_;
-  $web->PUT(
-   $srv->base_uri . '/file.mp4'
-  )->from_file('file.mp4')
- })->get;
+# EXAMPLE: examples/pod/put-from-file.pl
 
 =head2 Form upload
 
 File uploads via POST typically use the multipart/formdata MIME type.
 
- $web->listen(
-  'localhost',
-  directory => File::Temp::tempdir(),
-  allow_upload => 1,
- )->then(sub {
-  my ($srv) = @_;
-  $web->POST(
-   $srv->base_uri . '/file.mp4',
-   parts => [
-    { type => 'file', path => 'file.mp4' },
-   ],
-  )
- })->get;
+# EXAMPLE: examples/pod/form-upload.pl
 
 =head2 Stream between servers
 
 Transfer files between two servers - copy a Facebook photo to a Twitter post, for example:
 
- $web->GET(
-  $facebook_wall->photo_url('...')
- )->send_to(
-  $web->PUT(
-   $twitter->post_photo,
-   parts => [],
-  )
- )->get;
+# EXAMPLE: examples/pod/facebook-to-twitter.pl
 
 =head2 Video streaming
 
@@ -532,77 +483,11 @@ although MIME types may need updating:
 
 =head2 Spider website
 
- my ($dst) = ('/tmp/webserver-source', '/tmp/webserver-copy');
- mkdir $_ for $dst;
- $web->listen(
-  '*',
-  directory => $dst,
-  dav => 1,
- )->then(sub {
-  my ($srv) = @_;
-  my @pending;
-  my $retrieve = sub {
-   my ($info) = @_;
-   my $file = $info->{file};
-   my $path = $srv->base_uri . '/' . $file;
-   if($info->{type} eq 'file') {
-    $web->GET(
-     $path,
-    )->to_file("$dst/$file")
-   } else {
-    $web->dav_ls(
-     $path,
-    )->each(sub {
-     my $item = shift;
-     push @pending, {
-	  type => $item->type,
-	  file => $file . '/' . $item->file
-	 };
-    })
-  };
-  push @pending, { type => 'collection', file => '' };
-  fmap0 {
-   $retrieve->(my $file = shift)->then(sub {
-    print "Downloaded $file\n";
-	Future->done
-   }, sub {
-    warn "Download for $file failed: @_\n";
-	Future->done
-   })
-  } from => \@pending, concurrent => 4;
- })->get
+# EXAMPLE: examples/pod/spider.pl
 
 =head2 Upload files recursively
 
- my ($src, $dst) = ('/tmp/upload_from', '/tmp/webserver');
- mkdir $_ for $src, $dst;
- $web->listen(
-  '*',
-  directory => $dst,
-  dav => 1,
- )->then(sub {
-  my ($srv) = @_;
-  my @pending;
-  my $upload = sub {
-   my ($file) = @_;
-   my $path = $srv->base_uri . '/' . $file;
-   push @pending, map "$file/$_", glob "$src/$file/*" if -d $file;
-   return -d "$src/$file"
-    ? $web->MKCOL($path)
-	: $web->PUT($path)
-          ->from_file($file)
-  };
-  push @pending, '';
-  fmap0 {
-   $upload->(my $file = shift)->then(sub {
-    print "Uploaded $file\n";
-	Future->done
-   }, sub {
-    warn "Upload for $file failed: @_\n";
-	Future->done
-   })
-  } from => \@pending, concurrent => 4;
- })->get
+# EXAMPLE: examples/pod/recursive-put.pl
 
 =head2 Sync local and remote paths
 
@@ -690,10 +575,18 @@ Or use L<Web::Async::REST::Client>:
   })
  })->get
 
+=head3 SPORE
+
+The "Specification for Portable Object REST Environment" provides definitions for services.
+
+ $web->spore('spore/githubv3.json')->then(sub {
+  my ($spore) = @_;
+  $spore->list_issues('...')
+ })->get;
+
 =head3 Database wrappers
 
-There's a few helper modules for common tasks - UI and REST interface for
-accessing data in an SQLite database:
+There's a few helper modules for common tasks. Here's one way to get a web UI and REST interface for accessing data in an SQLite database:
 
  $web->listen('*')->then(sub {
   my ($srv) = @_;
@@ -704,7 +597,6 @@ accessing data in an SQLite database:
   )
  })->get;
  $loop->run;
-
 
 or PostgreSQL:
 
@@ -725,45 +617,7 @@ or PostgreSQL:
 With a server implementation that provides the C<web> and C<model> interface methods, you can expose a UI and/or REST interface
 by attaching them to the server.
 
- use Net::Async::IMAP::Server;
- use Net::Async::SMTP::Server;
- use Net::Async::AMQP::Server;
- use WebService::Amazon::DynamoDB::Server;
- my $srv_wrap = sub {
-  my ($http, $service) = @_;
-  die "$service needs ->$_" for grep !$service->can($_), qw(model web);
-  $loop->add($service);
-  $service->auth($http->auth);
-  Future->needs_all(
-   $http->attach('/api/v1' => Web::Async::REST::Model->new(model => $service->model)),
-   $http->attach('/'       => $service->web),
-  )
- };
- my %args = (
-  storage => 'pg:version=9.4',
- );
- my %srv = (
-  imap     => Net::Async::IMAP::Server->new(%args),
-  webmail  => Net::Async::IMAP::Client->new(%args),
-  smtp     => Net::Async::SMTP::Server->new(%args),
-  amqp     => Net::Async::AMQP::Server->new(%args),
-  dns      => Net::Async::DNS::Server->new(%args),
-  files    => FS::Async::Server->new(%args, path => File::Temp::tempdir()),
-  dynamodb => WebService::Amazon::DynamoDB::Server->new(%args),
- );
- Future->needs_all(
-  $web->auth->create_admin->then(sub {
-   my $admin = shift;
-   warn "Admin user is " . $admin->user . " with password " . $admin->password;
-  }),
-  map $web->listen($_ . '.localhost')->then(sub {
-   my ($srv) = @_;
-   $srv_wrap->($srv, $srv{$_})
-  }), keys %srv
- )->get;
- $loop->run;
-
-=head2 
+# EXAMPLE: examples/pod/server-wrappers.pl
 
 =cut
 
@@ -812,14 +666,35 @@ Takes the following named parameters:
 
 sub listen {
 	my ($self, $uri, %args) = @_;
-	$uri = URI->new($uri) unless ref $uri;
-	$self->loop->new_future;
+	$uri = $self->upgrade_uri($uri, \%args);
+	my $srv = Web::Async::Listener->new(uri => $uri, %args);
+	$self->add_child($srv);
+	$self->model->listeners->push([ $srv ])->transform(done => sub { $srv });
+}
+
+sub upgrade_uri {
+	my ($self, $uri, $args) = @_;
+	unless(ref $uri) {
+		$uri = URI->new($uri);
+		$uri->host('0.0.0.0') if $uri->host eq '*';
+	}
+	$args->{host} //= $uri->host;
+	$args->{port} //= $uri->port;
+	$args->{port} //= 0;
+	$args->{tls} //= $uri->is_secure ? 1 : 0;
+	$uri
 }
 
 sub request {
 	my ($self, %args) = @_;
-	$args{uri} = URI->new($args{uri}) unless ref $args{uri};
-	$self->loop->new_future;
+	$args{uri} = $self->upgrade_uri($args{uri}, \%args);
+	my $req = Web::Async::Request->new(%args);
+	$self->model->requests->push([
+		$self->connection(%args)->then(sub {
+			my ($conn) = @_;
+			$conn->request($req)
+		})->set_label($req->method . ' ' . $req->uri)
+	])
 }
 
 sub listeners {
