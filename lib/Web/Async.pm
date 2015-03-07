@@ -282,7 +282,8 @@ It is also possible for requests to have deferred content:
   $data
  })
 
-The L<Web::Async::Request> object provides a L<Web::Async::Request/response> method for accessing the current response state.
+The L<Web::Async::Request> object provides a L<Web::Async::Request/response> method. This can be used for accessing
+the current response state:
 
  my $req = $web->GET(
   'http://localhost/random-1M.img',
