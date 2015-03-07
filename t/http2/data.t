@@ -12,6 +12,34 @@ use constant {
 	END_STREAM => 2,
 };
 
+my @cases = ({
+	label => 'no padding',
+	construct => {
+		pad_length => 0,
+		data => 'xyz',
+	},
+	payload => 'xyz',
+	flags => 0
+}, {
+	label => 'single-byte padding',
+	construct => {
+		pad_length => 1,
+		data => 'xyz',
+	},
+	payload => "\0xyz",
+	flags => PADDED,
+});
+
+for my $case (@cases) {
+	note $case->{label};
+	my $frame = new_ok('Web::Async::Protocol::HTTP2::Frame::DATA' => [
+		%{$case->{construct}},
+	]);
+	is($frame->flags, $case->{flags}, 'flags match');
+	is($frame->$_, $case->{construct}->{$_}, "$_ matches") for sort keys %{$case->{construct}};
+	is_hexstr($frame->payload, $case->{payload}, 'payload is correct');
+}
+
 {
 	my $frame = Web::Async::Protocol::HTTP2::Frame::DATA->new(
 		padding => 0,
