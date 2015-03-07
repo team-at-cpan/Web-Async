@@ -58,7 +58,7 @@ sub on_stream {
 <!DOCTYPE html>
 <html>
 <head>
-<title>Example SPDY server</title>
+<title>Example HTTP2/SPDY4 server</title>
 <style type="text/css">
 * { margin: 0; padding: 0 }
 h1 { color: #ccc; background: #333 }
@@ -66,7 +66,7 @@ p { padding: 0.5em }
 </style>
 </head>
 <body>
-<h1>Protocol::SPDY example server</h1>
+<h1>HTTP2 example server</h1>
 <p>
 Your request was parsed as:
 </p>
