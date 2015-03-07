@@ -12,13 +12,13 @@ Just https, on port 1443:
 
 Upload a file to a server:
 
- perl -MWeb::Async::DSL -e'put "somefile.tar.gz" => "http://example.com/upload"'
+ perl -MWeb::Async::DSL -e'PUT "somefile.tar.gz" => "http://example.com/upload"'
 
 Show contents of a file:
 
- perl -MWeb::Async::DSL -e'get "http://example.com/readme.txt" => \*STDOUT'
+ perl -MWeb::Async::DSL -e'GET "http://example.com/readme.txt" => \*STDOUT'
 
 All headers for a URL:
 
- perl -MWeb::Async::DSL -e'options "http://example.com/somewhere" => \*STDOUT'
+ perl -MWeb::Async::DSL -e'OPTIONS "http://example.com/somewhere" => \*STDOUT'
 
