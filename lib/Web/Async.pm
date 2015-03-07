@@ -197,7 +197,20 @@ Streaming PSGI:
   psgi => sub {
    my ($env) = @_;
    die "no streaming' unless $env->{'psgi.streaming'};
-   sub { [ 200, [], [ 'OK' ] ] }
+   sub {
+    my ($responder) = @_;
+    my $writer = $responder->([ 200, [ 'Content-Type' => 'video/mpeg4' ]]);
+    $input->configure(
+     on_read => sub {
+      my ($buf, $eof) = @_;
+      $writer->write(substr $$buf, 0, min(length $$buf, 4096), '');
+      if($eof) {
+       $writer->write($$buf);
+       $writer->close;
+      }
+     }
+    );
+   }
   }
  );
 
