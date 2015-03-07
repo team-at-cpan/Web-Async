@@ -1,0 +1,50 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use feature qw(say);
+use IO::Async::Loop;
+use Web::Async;
+
+my $loop = IO::Async::Loop->new;
+$loop->add(my $web = Web::Async->new);
+Future->needs_all(
+	$web->listen(
+		'http://*',
+		# default
+		protocols => [qw(http1.1 http2)],
+		psgi => sub { [ 200, [], [ 'OK' ] ] },
+	)->then(sub {
+		my ($port) = shift->listen_port;
+		Future->needs_all(
+			(map $web->GET(
+				'http://localhost:' . $port,
+				protocols => [ $_ ],
+			), qw(http1.1 http2)),
+		)
+	}),
+	$web->listen(
+		'https://*',
+		# default
+		protocols => [qw(http1.1 http2 spdy/3.1)],
+		psgi => sub { [ 200, [], [ 'OK' ] ] },
+	)->then(sub {
+		my ($port) = shift->listen_port;
+		Future->needs_all(
+			(map $web->GET(
+				'https://localhost:' . $port,
+				protocols => [ $_ ],
+			), qw(http1.1 http2 spdy/3.1)),
+		)
+	}),
+)->then(sub {
+	for(@_) {
+		say $_->uri . " (" . $_->protocol . ") status: " . $_->body;
+		warn "Unexpected status" unless $_->body eq 'OK'
+	}
+})->then(sub {
+	Future->needs_all(
+		(map $_->shutdown, $web->listeners),
+		(map $_->shutdown, $web->connections),
+	)
+})->get;
+

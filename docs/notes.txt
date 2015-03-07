@@ -1,0 +1,24 @@
+Serve current directory on :80 and :443, using a generated cert on startup:
+
+ perl -MWeb::Async::DSL -e'server { root "." }'
+
+Just http:
+
+ perl -MWeb::Async::DSL -e'server { http { root "." } }'
+
+Just https, on port 1443:
+
+ perl -MWeb::Async::DSL -e'server { https { port 1443; root "." } }'
+
+Upload a file to a server:
+
+ perl -MWeb::Async::DSL -e'put "somefile.tar.gz" => "http://example.com/upload"'
+
+Show contents of a file:
+
+ perl -MWeb::Async::DSL -e'get "http://example.com/readme.txt" => \*STDOUT'
+
+All headers for a URL:
+
+ perl -MWeb::Async::DSL -e'options "http://example.com/somewhere" => \*STDOUT'
+
