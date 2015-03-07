@@ -15,17 +15,23 @@ sub new {
 	my $self = bless {
 		flags => $args{flags} || 0,
 		data  => $args{data},
+		padding => '',
 	}, $class;
 	my $payload = '';
 	my $pad_length = 0;
-	if($args{padding}) {
+	$args{pad_length} = length $args{padding} if defined $args{padding};
+	$self->{pad_length} = $args{pad_length};
+	if($args{pad_length}) {
 		$self->{flags} |= PADDED;
-		$pad_length = $args{padding} - 1;
+		$pad_length = $args{pad_length} - 1;
 		die 'padding' if $pad_length > 0xFF || $pad_length < 0;
 		$payload .= pack 'C1', $pad_length;
 	}
 	$payload .= $args{data};
-	$payload .= "\0" x $pad_length if $pad_length;
+	if($pad_length) {
+		$payload .= "\0" x $pad_length if $pad_length;
+		$payload .= "\0" x $pad_length if $pad_length;
+	}
 	$self->{payload} = $payload;
 	$self->{flags} |= END_STREAM if $args{end_stream};
 	$self
@@ -42,6 +48,8 @@ sub extract {
 }
 
 sub data { shift->{data} }
+sub padding { shift->{padding} }
+sub pad_length { shift->{pad_length} }
 sub payload { shift->{payload} }
 sub flags { shift->{flags} }
 
