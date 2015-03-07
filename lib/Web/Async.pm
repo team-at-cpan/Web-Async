@@ -254,6 +254,15 @@ Or JSON:
   json => $some_hashref
  )
 
+Technically there's XML as well:
+
+ $web->POST(
+  'http://localhost',
+  xml => $something
+ )
+
+but this works better with a L<LibXML::DOM> instance than a plain Perl datastructure.
+
 It is also possible for requests to have deferred content:
 
  # Stream data from a local file, given by name
