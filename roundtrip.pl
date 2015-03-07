@@ -15,8 +15,10 @@ my $loop = IO::Async::Loop->new;
 # Set up a server first
 $loop->add(
 	my $srv = new_ok('Web::Async::Server', [
+		($ENV{WEB_ASYNC_PORT} ? (port => $ENV{WEB_ASYNC_PORT}) : ()),
 		protocols => [
-			'spdy/3.1'
+#			'h2-16', 'h2-14',
+'spdy/3.1', 
 		]
 	])
 );
