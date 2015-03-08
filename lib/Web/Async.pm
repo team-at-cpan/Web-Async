@@ -90,7 +90,7 @@ Transport-layer protocol implementations are from the following modules:
 
 =over 4
 
-=item * L<Protocol::HTTP::V1_1> - implements HTTP/1.1 as described in RFC2616 and subsequently updated in RFC7230-RFC7236
+=item * L<Protocol::HTTP> - implements HTTP/1.1 as described in RFC2616 and subsequently updated in RFC7230-RFC7236
 
 =item * L<Protocol::HTTP::V2_0> - implements HTTP/2.0 (what Chrome describes as SPDY/4)
 
@@ -113,9 +113,11 @@ Ability to replace nginx/apache2 and gain full SPDY/HTTP2 while still supporting
 
 Act as a proxy and integrate with existing proxies (HTTP, SOCKS, tor).
 
+=head1 API Examples
+
 =head2 Listening for requests
 
-These can be given as paths (for files and Unix-domain sockets) or URIs. Some examples of valid entries:
+The listen endpoint can be given as a path (for files and Unix-domain sockets), tcp/port or udp/port shortcut, or URI. Some examples of valid entries:
 
 =over 4
 
@@ -131,7 +133,17 @@ These can be given as paths (for files and Unix-domain sockets) or URIs. Some ex
 
 =item * /path
 
+=item * domain.example.com
+
+=item * domain.example.com:8080
+
 =back
+
+When no port is specified, will attempt plaintext on 80 and TLS on 443, retrying
+with server-assigned ports if those requests fail.
+
+A listener needs a handler to do anything useful with incoming requests. See
+the next sections for examples of some existing handlers.
 
 =head3 CGI
 
@@ -197,7 +209,7 @@ which could also be written as:
   psgi => $web->psgi_from_stream($input),
  );
 
-=head3 HTTP proxy
+=head3 HTTP
 
 Proxy all requests to a backend HTTP server:
 
@@ -283,7 +295,7 @@ See L<https://github.com/lachesis/scallion> or L<https://github.com/katmagic/Sha
 Example tor site:
 
  $web->GET(
-  'http://perlwebhpaqrgtzi.onion',
+  'https://perlwebhpaqrgtzi.onion',
   proxy => 'socks5://127.0.0.1:9050',
  )->get;
 
