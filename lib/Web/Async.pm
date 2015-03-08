@@ -679,7 +679,11 @@ Takes the following named parameters:
 sub listen {
 	my ($self, $uri, %args) = @_;
 	$uri = $self->upgrade_uri($uri, \%args);
-	my $srv = Web::Async::Listener->new(uri => $uri, %args);
+	$self->check_listener(\%args);
+	my $srv = Web::Async::Listener->new(
+		%args,
+		uri => $uri,
+	);
 	$self->add_child($srv);
 	$self->model->listeners->push([ $srv ])->transform(done => sub { $srv });
 }
@@ -695,6 +699,19 @@ sub upgrade_uri {
 	$args->{port} //= 0;
 	$args->{tls} //= $uri->is_secure ? 1 : 0;
 	$uri
+}
+
+sub check_listener {
+	my ($self, $args) = @_;
+	require Web::Async::CGI if exists $args->{cgi};
+	require Web::Async::FastCGI if exists $args->{fastcgi};
+	require Web::Async::PSGI if exists $args->{psgi};
+	require Web::Async::UWSGI if exists $args->{uwsgi};
+	require Web::Async::SPDY if exists $args->{spdy};
+	require Web::Async::HTTP if exists $args->{http};
+	require Web::Async::HTTP2 if exists $args->{http2};
+	require Web::Async::Directory if exists $args->{directory};
+	$self
 }
 
 sub request {
