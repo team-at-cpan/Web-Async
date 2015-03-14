@@ -444,7 +444,7 @@ It is also possible for requests to have deferred content:
   my $data = join '', map chr(256 * rand), 1..min($count, 4096);
   $count -= length $data;
   $data
- })->get;
+ })->complete->get;
 
 The L<Web::Async::Request> object provides a L<Web::Async::Request/response> method. This can be used for accessing
 the current response state:
