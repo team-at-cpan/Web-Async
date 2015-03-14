@@ -731,17 +731,67 @@ sub check_listener {
 	$self
 }
 
+=head2 request
+
+Retry using current policy:
+
+* Make connection
+* If SSL:
+** Try ALPN
+** Try NPN
+** Use https
+
+Protocol negotiated through ALPN/NPN will be used to select handler class.
+
+Connection allocation:
+
+* Generate connkey using %args (anything TLS-related, host, port)
+* Check if we have a free active connection - http2 means "can still allocate streams", http1 is "connected but not currently processing a request"
+* Connect
+* SSL if we have it
+
+Apply request to connection. On ready, remove from active requests. Connection should update its own state automatically.
+
+HTTP2 connections are added to the free active list as soon as possible, since they can queue and deliver requests once connection is established.
+
+We don't know whether to favour a single or multiple connections until after the first request to a given host:port:TLS endpoint has been initiated.
+
+* In HTTP2/SPDY-over-TLS mode, a single connection is typical - ALPN negotiation tells us when this is the case.
+
+* In plain HTTP2 mode, again a single connection is used - we get this information from the HTTP Upgrade negotiation.
+
+* In HTTP mode, multiple connections are probably a better default - no ALPN or 'http' as ALPN, or plaintext HTTP
+
+So as soon as we assign the protocol, we can use a method on that protocol class to determine whether to upgrade this to a multi-connection key or
+leave at a single connection.
+
+ $self->{connection_limit}{$connkey} = $proto->suggested_parallel_connections;
+
+
+
+=cut
+
 sub request {
 	my ($self, %args) = @_;
 	$args{uri} = $self->upgrade_uri($args{uri}, \%args);
 	my $req = Web::Async::Request->new(%args);
-	$self->model->requests->push([
+	my $f = $self->retry_policy(sub {
 		$self->connection(%args)->then(sub {
 			my ($conn) = @_;
 			$conn->request($req)
-		})->set_label($req->method . ' ' . $req->uri)
-	])
+		})
+	}, %args)->set_label($req->method . ' ' . $req->uri);
+	$self->model->requests->set_key(
+		Scalar::Util::refaddr($f) => $f
+	);
+	$req
 }
+
+sub model { $_[0]->{model} //= Web::Async::Model->new }
+
+sub bus { $_[0]->{bus} //= Mixin::Event::Dispatch::Bus->new }
+
+sub retry_policy { my ($self, $code, %args) = @_; $code->() }
 
 sub listeners {
 	@{ shift->{listeners} }
