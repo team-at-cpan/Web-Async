@@ -646,6 +646,9 @@ by attaching them to the server.
 use Web::Async::Client;
 use Web::Async::Server;
 
+use Web::Async::Model;
+use Mixin::Event::Dispatch::Bus;
+
 =head1 METHODS
 
 =cut
