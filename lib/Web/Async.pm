@@ -801,6 +801,8 @@ sub connections {
 	@{ shift->{connections} }
 }
 
+# Obviously these are just the default ones, new verbs can
+# be specified by calling L</request> directly.
 our @HTTP_METHODS = qw(
 	CONNECT
 	GET HEAD OPTIONS POST PUT
@@ -824,10 +826,12 @@ our @HTTP_METHODS = qw(
 );
 
 BEGIN {
-	*$_ = sub {
-		my $self = shift;
-		$self->request(method => $_, uri => @_)
-	} for @HTTP_METHODS
+	for my $meth (@HTTP_METHODS) {
+		*$meth = sub {
+			my $self = shift;
+			$self->request(method => $meth, uri => @_)
+		}
+	}
 }
 
 1;
