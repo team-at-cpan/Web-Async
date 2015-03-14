@@ -700,7 +700,9 @@ sub listen {
 		uri => $uri,
 	);
 	$self->add_child($srv);
-	$self->model->listeners->push([ $srv ])->transform(done => sub { $srv });
+	$self->model->listeners->set_key(
+		Scalar::Util::refaddr($srv) => $srv
+	)->transform(done => sub { $srv });
 }
 
 sub upgrade_uri {
