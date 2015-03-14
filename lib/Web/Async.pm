@@ -760,7 +760,7 @@ We don't know whether to favour a single or multiple connections until after the
 
 * In plain HTTP2 mode, again a single connection is used - we get this information from the HTTP Upgrade negotiation.
 
-* In HTTP mode, multiple connections are probably a better default - no ALPN or 'http' as ALPN, or plaintext HTTP
+* In HTTP mode, multiple connections are probably a better default - no ALPN, or 'http' as ALPN, or plaintext HTTP before/without Upgrade
 
 So as soon as we assign the protocol, we can use a method on that protocol class to determine whether to upgrade this to a multi-connection key or
 leave at a single connection.
