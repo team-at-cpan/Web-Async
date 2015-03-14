@@ -86,13 +86,13 @@ Transport-layer protocol implementations are from the following modules:
 
 =over 4
 
-=item * L<Protocol::HTTP> - implements HTTP/1.1 as described in RFC2616 and subsequently updated in RFC7230-RFC7236
+=item * L<Protocol::HTTP::HTTP1> - implements HTTP/1.1 as described in RFC2616 and subsequently updated in RFC7230-RFC7236
 
-=item * L<Protocol::HTTP::V2_0> - implements HTTP/2.0 (what Chrome describes as SPDY/4)
+=item * L<Protocol::HTTP::HTTP2> - implements HTTP/2.0 (or "SPDY/4" if you're using Chrome)
 
-=item * L<Protocol::HTTP::SPDY3_1> - implements SPDY/3.1
+=item * L<Protocol::HTTP::SPDY3> - implements SPDY/3.1
 
-=item * L<Protocol::UWSGI> - implements UWSGI
+=item * L<Protocol::UWSGI> - implements UWSGI, as seen in some online docs somewhere
 
 =item * L<Protocol::CGI> - implements CGI as described in RFC3875
 
