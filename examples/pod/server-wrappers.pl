@@ -22,6 +22,7 @@ my %args = (
  storage => 'pg:version=9.4',
 );
 my %srv = (
+ auth     => $web->auth->service(%args),
  imap     => Net::Async::IMAP::Server->new(%args),
  webmail  => Net::Async::IMAP::Client->new(%args),
  smtp     => Net::Async::SMTP::Server->new(%args),
