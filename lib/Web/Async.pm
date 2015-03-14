@@ -25,20 +25,16 @@ Web::Async - provides server/client support for some typical web-related activit
   'https://*:8086',
   directory => '/var/www/html'
  )->then(sub {
+  my ($srv) = @_;
+  print "Listening on " . $srv->base_uri . "\n";
   $web->GET(
-   'https://localhost:8086/somefile.txt'
-  )->response
+   $srv->base_uri . '/somefile.txt'
+  )->response_ready
  })->then(sub {
   my $resp = shift;
   warn "Bad status: " . $resp->code unless $resp->is_2xx;
   print "Content: " . $resp->body . "\n";
  })->get;
-
- # PSGI
- $web->listen(
-  'https://*:8086',
-  directory => '/var/www/html'
- );
 
  # Attempt graceful shutdown before exit, allowing up to 5s to complete
  $web->shutdown(timeout => 5)->get;
