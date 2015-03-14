@@ -265,6 +265,20 @@ Full write access is enabled with the C< dav > option:
   dav => 1,
  );
 
+=head3 Serving static content
+
+You can provide content on specific paths using L<Web::Async::Listener/attach>:
+
+ $web->listen(
+  'static.example.com',
+ )->then(sub {
+  my ($srv) = @_;
+  Future->needs_all(
+   $srv->attach('/example.txt'  => text => 'a text file'),
+   $srv->attach('/example.json' => json => { id => 1, success => JSON->true }),
+  )
+ })->get;
+
 =head2 Listening as a tor service
 
 Exposing a service via Tor:
