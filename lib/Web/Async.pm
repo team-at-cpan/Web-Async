@@ -677,11 +677,13 @@ Takes the following named parameters:
 
 =item * uwsgi - a UWSGI endpoint to invoke for each request
 
-=item * fastcgi - a UWSGI endpoint to invoke for each request
+=item * fastcgi - a FastCGI endpoint
 
-=item * http - send request to a backend HTTP proxy
+=item * http - send request to a backend HTTP/1.1 proxy
 
-=item * http2 - send request to a backend HTTP2 proxy
+=item * spdy - send request to a backend SPDY/3.1 proxy
+
+=item * http2 - send request to a backend HTTP/2.0 proxy
 
 =item * directory - serve files from a directory
 
