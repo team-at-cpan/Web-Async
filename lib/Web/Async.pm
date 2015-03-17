@@ -98,6 +98,255 @@ Transport-layer protocol implementations are from the following modules:
 
 =back
 
+=cut
+
+use Web::Async::Client;
+use Web::Async::Server;
+
+use File::HomeDir;
+use Web::Async::Model;
+use Mixin::Event::Dispatch::Bus;
+
+=head1 METHODS
+
+=cut
+
+=head2 request
+
+Takes the following named parameters:
+
+=over 4
+
+=item * version - the HTTP version string, defaults to HTTP/1.1
+
+=item *  ...
+
+=back
+
+=cut
+
+
+=head2 listen
+
+Takes a scalar value indicating the listener endpoint, then a list of
+zero or more named arguments.
+
+Returns a L<Future> which resolves to a L<Web::Async::Listener> instance.
+
+The endpoint defines where we expect to receive requests. It can define the
+protocol, host, port and path.
+
+An endpoint of C< * > indicates 'listen on the default'. This would start:
+
+=over 4
+
+=item * HTTP server - on port 80 or a server-assigned port if that one is already taken,
+
+=item * HTTPS server - on port 443 or a server-assigned port if taken
+
+=back
+
+Other forms:
+
+=over 4
+
+=item * http://localhost - listens on localhost:80 or localhost:0 (server-assigned)
+
+=item * https://localhost - listens for TLS requests on localhost:443 or localhost:0 (server-assigned)
+
+=item * http://localhost:2128 - listens for HTTP requests on localhost:2128
+
+=back
+
+The endpoint is given to a L<Web::Async::Listener> instance.
+
+This instance needs a handler.  The default behaviour - with no configured handler -
+is to return a 502 error, indicating that we have no way to deal with the request.
+You can specify a handler directly with the C<on_request> parameter, or use a
+subclass of L<Web::Async::Listener>.
+
+There's a shortcut for the common handler types. Classes for these types can
+register their own handlers, but the default list is:
+
+=over 4
+
+=item * L<cgi|Web::Async::Listener::CGI> - a CGI script to invoke on each request
+
+=item * L<psgi|Web::Async::Listener::PSGI> - a PSGI coderef to invoke for each request
+
+=item * L<uwsgi|Web::Async::Listener::UWSGI> - a UWSGI endpoint to invoke for each request
+
+=item * L<fastcgi|Web::Async::Listener::FastCGI> - a FastCGI endpoint
+
+=item * L<http|Web::Async::Listener::HTTP1> - send request to a backend HTTP/1.1 proxy
+
+=item * L<spdy|Web::Async::Listener::SPDY> - send request to a backend SPDY/3.1 proxy
+
+=item * L<http2|Web::Async::Listener::HTTP2> - send request to a backend HTTP/2.0 proxy
+
+=item * L<directory|Web::Async::Listener::Directory> - serve files from a directory
+
+=back
+
+so:
+
+ $web->listen('*', cgi => 'some.cgi')->get;
+
+would start a listener which forwards all HTTP requests through a CGI script, executed
+from a pool of preforked workers.
+
+=cut
+
+sub listen {
+	my ($self, $uri, %args) = @_;
+	$uri = $self->upgrade_uri($uri, \%args);
+	$self->check_listener(\%args);
+	my $srv = Web::Async::Listener->new(
+		%args,
+		uri => $uri,
+	);
+	$self->add_child($srv);
+	$self->model->listeners->set_key(
+		Scalar::Util::refaddr($srv) => $srv
+	)->transform(done => sub { $srv });
+}
+sub tls_gen {
+	File::HomeDir->my_dist_data('Web-Async', { create => 1 });
+}
+
+sub upgrade_uri {
+	my ($self, $uri, $args) = @_;
+	unless(ref $uri) {
+		$uri = URI->new($uri);
+		$uri->host('0.0.0.0') if $uri->host eq '*';
+	}
+	$args->{host} //= $uri->host;
+	$args->{port} //= $uri->port;
+	$args->{port} //= 0;
+	$args->{tls} //= $uri->is_secure ? 1 : 0;
+	$uri
+}
+
+sub check_listener {
+	my ($self, $args) = @_;
+	require Web::Async::CGI if exists $args->{cgi};
+	require Web::Async::FastCGI if exists $args->{fastcgi};
+	require Web::Async::PSGI if exists $args->{psgi};
+	require Web::Async::UWSGI if exists $args->{uwsgi};
+	require Web::Async::SPDY if exists $args->{spdy};
+	require Web::Async::HTTP if exists $args->{http};
+	require Web::Async::HTTP2 if exists $args->{http2};
+	require Web::Async::Directory if exists $args->{directory};
+	$self
+}
+
+=head2 request
+
+Retry using current policy:
+
+* Make connection
+* If SSL:
+** Try ALPN
+** Try NPN
+** Use https
+
+Protocol negotiated through ALPN/NPN will be used to select handler class.
+
+Connection allocation:
+
+* Generate connkey using %args (anything TLS-related, host, port)
+* Check if we have a free active connection - http2 means "can still allocate streams", http1 is "connected but not currently processing a request"
+* Connect
+* SSL if we have it
+
+Apply request to connection. On ready, remove from active requests. Connection should update its own state automatically.
+
+HTTP2 connections are added to the free active list as soon as possible, since they can queue and deliver requests once connection is established.
+
+We don't know whether to favour a single or multiple connections until after the first request to a given host:port:TLS endpoint has been initiated.
+
+* In HTTP2/SPDY-over-TLS mode, a single connection is typical - ALPN negotiation tells us when this is the case.
+
+* In plain HTTP2 mode, again a single connection is used - we get this information from the HTTP Upgrade negotiation.
+
+* In HTTP mode, multiple connections are probably a better default - no ALPN, or 'http' as ALPN, or plaintext HTTP before/without Upgrade
+
+So as soon as we assign the protocol, we can use a method on that protocol class to determine whether to upgrade this to a multi-connection key or
+leave at a single connection.
+
+ $self->{connection_limit}{$connkey} = $proto->suggested_parallel_connections;
+
+
+
+=cut
+
+sub request {
+	my ($self, %args) = @_;
+	$args{uri} = $self->upgrade_uri($args{uri}, \%args);
+	my $req = Web::Async::Request->new(%args);
+	my $f = $self->retry_policy(sub {
+		$self->connection(%args)->then(sub {
+			my ($conn) = @_;
+			$conn->request($req)
+		})
+	}, %args)->set_label($req->method . ' ' . $req->uri);
+	$self->model->requests->set_key(
+		Scalar::Util::refaddr($f) => $f
+	);
+	$req
+}
+
+sub model { $_[0]->{model} //= Web::Async::Model->new }
+
+sub bus { $_[0]->{bus} //= Mixin::Event::Dispatch::Bus->new }
+
+sub retry_policy { my ($self, $code, %args) = @_; $code->() }
+
+sub listeners {
+	@{ shift->{listeners} }
+}
+
+sub connections {
+	@{ shift->{connections} }
+}
+
+# Obviously these are just the default ones, new verbs can
+# be specified by calling L</request> directly.
+our @HTTP_METHODS = qw(
+	CONNECT
+	GET HEAD OPTIONS POST PUT
+	DELETE TRACE PATCH
+	PROPFIND PROPPATCH
+	MKCOL
+	COPY MOVE
+	LOCK UNLOCK
+	BASELINECONTROL
+	VERSIONCONTROL
+	REPORT
+	CHECKOUT UNCHECKOUT CHECKIN
+	MKWORKSPACE
+	UPDATE
+	LABEL
+	MERGE
+	MKACTIVITY
+	ORDERPATCH
+	ACL
+	SEARCH
+);
+
+BEGIN {
+	for my $meth (@HTTP_METHODS) {
+		*$meth = sub {
+			my $self = shift;
+			$self->request(method => $meth, uri => @_)
+		}
+	}
+}
+
+1;
+
+__END__
+
 =head2 Motivation
 
 This module mainly exists to provide seamless support for HTTP2/SPDY alongside existing protocols such as HTTP1, UWSGI and FastCGI.
