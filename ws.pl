@@ -13,14 +13,28 @@ use Time::Moment;
 use Digest::SHA qw(sha1);
 use MIME::Base64 qw(encode_base64);
 
+# As defined in the RFC - it's used as part of the hashing for the security header in the response
 use constant WEBSOCKET_GUID => '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 field $srv;
+field $ryu;
 
+# Given the state of websockets in general, this is unlikely to change from `HTTP/1.1` anytime soon
 field $http_version : reader : param = 'HTTP/1.1';
+# 101 Upgrade is defined by the RFC, but if you have special requirements you can override via the constructor
 field $status : reader : param = '101';
+# The message is probably ignored by everything
 field $msg : reader : param = 'Switching Protocols';
+# There aren't a vast number of extensions, at the time of writing https://www.iana.org/assignments/websocket/websocket.xhtml#extension-name
+# lists just two of 'em
+field $supported_extension : reader : param {
+    +{
+        'permessage-deflate' => 1
+    }
+}
+field $server_name : reader : param = 'perl';
 
+# Opcodes have a registry here: https://www.iana.org/assignments/websocket/websocket.xhtml#opcode
 my %OPCODE_BY_CODE = (
     1 => 'text',
     2 => 'binary',
