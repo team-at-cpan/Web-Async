@@ -97,7 +97,7 @@ async method handle_connection ($conn) {
             $hdr{$k} = $v;
         }
 
-        $log->infof('headers = %s', format_json_text(\%hdr));
+        $log->infof('url = %s, headers = %s', $url, format_json_text(\%hdr));
 
         unless($hdr{sec_websocket_version} >= 13) {
             die sprintf "Invalid websocket version %s\n", $hdr{sec_websocket_version};
