@@ -217,15 +217,17 @@ HTML
 
     # Body processing
     try {
+        $log->tracef('Start reading frames');
         while(1) {
-            $log->infof('Start reading frames');
-            my $payload = await $self->read_frame($conn);
-            $log->infof('Had frame: %s', $payload);
-            await $self->write_frame(
-                $conn,
-                type    => 'text',
-                payload => $payload
-            );
+            await $incoming_frames->unblocked;
+            my $frame = await $self->read_frame($conn);
+            $log->tracef('Had frame: %s', $frame);
+            $incoming_frames->emit($frame);
+#            await $self->write_frame(
+#                $conn,
+#                type    => 'text',
+#                payload => $payload
+#            );
         }
     } catch ($e) {
         $log->errorf('Problem, %s', $e);
