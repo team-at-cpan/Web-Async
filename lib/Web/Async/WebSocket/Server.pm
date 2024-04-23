@@ -1,6 +1,20 @@
 package Web::Async::WebSocket::Server;
 use Myriad::Class extends => 'IO::Async::Notifier';
 
+## VERSION
+## AUTHORITY
+
+=head1 NAME
+
+Web::Async::WebSocket::Server - L<Future>-based web+HTTP handling
+
+=head1 DESCRIPTION
+
+Although other HTTP-adjacent protocols are planned, currently this only contains L<Web::Async::WebSocket::Server>,
+see documentation there for more details.
+
+=cut
+
 use Ryu::Async;
 use IO::Async::Listener;
 
@@ -53,3 +67,12 @@ method on_stream ($listener, $stream, @) {
 }
 
 1;
+
+=head1 AUTHOR
+
+Tom Molesworth C<< <TEAM@cpan.org> >>
+
+=head1 LICENSE
+
+Copyright Tom Molesworth 2024. Licensed under the same terms as Perl itself.
+
