@@ -94,8 +94,8 @@ method _add_to_loop ($loop) {
     );
 }
 
-method on_stream ($listener, $conn, @other) {
-    $log->infof('Connection %s for listener %s', "$conn", "$listener");
+method on_stream ($listener, $conn, @) {
+    $log->tracef('Connection %s for listener %s', "$conn", "$listener");
     $conn->configure(
         on_read => sub { 0 }
     );
@@ -105,41 +105,50 @@ method on_stream ($listener, $conn, @other) {
     );
 }
 
+async method read_headers ($conn) {
+    my %hdr;
+    while(1) {
+        my $line = decode_utf8('' . await $conn->read_until("\x0D\x0A"));
+        $line =~ s/\x0D\x0A$//;
+        last unless length $line;
+
+        my ($k, $v) = $line =~ /^([^:]+):\s+(.*)$/;
+        $k = lc($k =~ tr{-}{_}r);
+        $hdr{$k} = $v;
+    }
+    return \%hdr;
+}
+
+method generate_response_key ($key) {
+    die "No websocket key provided\n" unless defined $key and length $key;
+    return encode_base64(sha1($key . WEBSOCKET_GUID), '');
+}
+
 async method handle_connection ($conn) {
     try {
-        my %hdr;
         my $first = await $conn->read_until("\x0D\x0A");
-        my ($method, $url, $version) = $first =~ m{^(\S+)\s+(\S+)\s+HTTP/(\d+\.\d+)\x0D\x0A$}a;
-        $log->infof('HTTP request is [%s] for [%s] version %s', $method, $url, $version);
-        while(1) {
-            $log->infof('read line');
-            my $line = decode_utf8('' . await $conn->read_until("\x0D\x0A"));
-            $line =~ s/\x0D\x0A$//;
-            $log->infof('Line length %d', length $line);
-            last unless length $line;
-            my ($k, $v) = $line =~ /^([^:]+):\s+(.*)$/;
-            $log->infof('Header [%s] => [%s]', $k, $v);
-            $k = lc($k =~ tr{-}{_}r);
-            $hdr{$k} = $v;
+        my ($method, $url, $version) = $first =~ m{^(\S+)\s+(\S+)\s+(HTTP/\d+\.\d+)\x0D\x0A$}a;
+        $log->tracef('HTTP request is [%s] for [%s] version %s', $method, $url, $version);
+        my $hdr = await $self->read_headers($conn);
+
+        $log->tracef('url = %s, headers = %s', $url, format_json_text($hdr));
+
+        unless($hdr->{sec_websocket_version} >= 13) {
+            die sprintf "Invalid websocket version %s\n", $hdr->{sec_websocket_version};
         }
 
-        $log->infof('url = %s, headers = %s', $url, format_json_text(\%hdr));
-
-        unless($hdr{sec_websocket_version} >= 13) {
-            die sprintf "Invalid websocket version %s\n", $hdr{sec_websocket_version};
-        }
-
-        my $key = $hdr{sec_websocket_key}
-            or die "No websocket key provided\n";
-        my $response_key = encode_base64(sha1($key . WEBSOCKET_GUID), '');
         my %output = (
             'Upgrade'    => 'websocket',
             'Connection' => 'upgrade',
-            'Server'     => 'perl',
+            'Server'     => $server_name,
             'Date'       => Time::Moment->now_utc->strftime("%a, %d %b %Y %H:%M:%S GMT"),
         );
-        $output{'Sec-Websocket-Extensions'} = $hdr{sec_websocket_extensions};
-        $output{'Sec-WebSocket-Accept'} = $response_key;
+        $output{'Sec-WebSocket-Accept'} = $self->generate_response_key($hdr->{sec_websocket_key});
+
+        my @extensions = grep { $supported_extension{$_} } map { /([^=]+)/ } split /\s*;\s*/, $hdr->{sec_websocket_extensions};
+        $output{'Sec-Websocket-Extensions'} = join ';', sort @extensions;
+
+        # Send the entire header block in a single write
         await $conn->write(
             join(
                 "\x0D\x0A",
@@ -225,32 +234,40 @@ HTML
 }
 
 async method read_frame ($stream) {
-    $log->infof('Reading frames from %s', "$stream");
+    $log->tracef('Reading frames from %s', "$stream");
     my $fin;
     my $data = '';
     my $compressed;
     my $type;
     do {
-        my ($opcode, $len) = unpack 'C1C1', '' . await $stream->read_exactly(2);
+        my ($chunk, $eof);
+        ($chunk, $eof) = await $stream->read_exactly(2);
+        die "EOF\n" if $eof;
+        my ($opcode, $len) = unpack 'C1C1', $chunk;
         my $masked = $len & 0x80;
-        die 'unmasked frame' unless $masked;
+        die "unmasked frame\n" unless $masked;
         $len &= ~0x80;
         $fin = ($opcode & 0x80) ? 1 : 0;
         my @rsv = map { ($opcode & $_) ? 1 : 0 } 0x40, 0x20, 0x10;
         $compressed //= $rsv[0];
         $type //= $opcode & 0x0F;
         if($len == 126) {
-            ($len) = unpack 'n1', '' . await $stream->read_exactly(2);
+            ($chunk, $eof) = await $stream->read_exactly(2);
+            die "EOF\n" if $eof;
+            ($len) = unpack 'n1', $chunk;
             die 'invalid length' if $len < 126;
         } elsif($len == 127) {
-            ($len) = unpack 'Q>1', '' . await $stream->read_exactly(8);
+            ($chunk, $eof) = await $stream->read_exactly(8);
+            die "EOF\n" if $eof;
+            ($len) = unpack 'Q>1', $chunk;
             die 'invalid length' if $len < 0xFFFF or $len & 0x80000000;
         }
         my $mask = '';
         if($masked) {
-            $mask = await $stream->read_exactly(4);
+            ($mask, $eof) = await $stream->read_exactly(4);
+            die "EOF\n" if $eof;
         }
-        $log->infof(
+        $log->tracef(
             'Frame opcode %d, length %d, fin = %s, rsv = %s %s %s, mask key %v0x',
             $opcode,
             $len,
@@ -258,25 +275,30 @@ async method read_frame ($stream) {
             @rsv,
             $mask
         );
-        my $payload = await $stream->read_exactly($len);
+        die "excessive length\n" if defined($maximum_payload_size) and $len + length($data) > $maximum_payload_size;
+        (my $payload, $eof) = await $stream->read_exactly($len);
+        die "EOF\n" if $eof;
         if($masked) {
-            $log->infof('Masked payload = %v0x', $payload);
+            $log->tracef('Masked payload = %v0x', $payload);
             my ($frac, $int) = POSIX::modf(length($payload) / 4);
             $payload ^.= ($mask x $int) . substr($mask, 0, 4 * $frac);
         }
-        $log->infof('Payload = %v0x', $payload);
+        $log->tracef('Payload = %v0x', $payload);
         $data .= $payload;
     } until $fin;
     $data = $self->inflate($data . "\x00\x00\xFF\xFF") if $compressed;
-    $log->infof('Frame opcode is %s', $OPCODE_BY_CODE{$type});
+    $log->tracef('Frame opcode is %s', $OPCODE_BY_CODE{$type});
     $data = decode_utf8($data) if $type == $OPCODE_BY_NAME{text};
-    $log->infof('Finished, data is now %s', $data);
-    return $data;
+    $log->tracef('Finished, data is now %s', $data);
+    return Web::Async::WebSocket::Frame->new(
+        payload => $data,
+        opcode => $type
+    );
 }
 
 async method write_frame ($stream, %args) {
     my $compressed = $args{compress} // 1;
-    $log->infof('Write frame with %s', \%args);
+    $log->tracef('Write frame with %s', \%args);
     # FIN
     my $opcode = $OPCODE_BY_NAME{$args{type}};
     my $payload = $args{payload};
@@ -289,7 +311,7 @@ async method write_frame ($stream, %args) {
         $payload = $self->deflate($payload);
         # Strip terminator if we have one
         $payload =~ s{\x00\x00\xFF\xFF$}{};
-        $log->infof(
+        $log->tracef(
             'Size after deflation is %d/%d, ratio of %4.1f%%',
             length($payload),
             $original,
