@@ -55,7 +55,6 @@ method inflate ($data) {
 }
 
 method _add_to_loop ($loop) {
-    $self->decode_frame("\x03\x9F");
     $self->add_child(
         $srv = IO::Async::Listener->new(
             on_stream => $self->curry::weak::on_stream,
