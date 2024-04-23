@@ -290,10 +290,14 @@ package main {
 use Myriad::Class;
 use Log::Any::Adapter 'Stderr', log_level => 'debug';
 use IO::Async::Loop;
+
+binmode STDERR, ':encoding(UTF-8)';
+
 my $loop = IO::Async::Loop->new;
 $loop->add(
     WS->new
 );
+$loop->run;
 
 my $sock = await $loop->connect(
     addr => {
