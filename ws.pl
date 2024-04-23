@@ -7,6 +7,7 @@ use IO::Async::Listener;
 use List::Util qw(pairmap);
 use Compress::Zlib;
 use POSIX ();
+use Time::Moment;
 use Digest::SHA qw(sha1);
 use MIME::Base64 qw(encode_base64);
 
@@ -99,6 +100,7 @@ async method handle_connection ($conn) {
             'Upgrade'    => 'websocket',
             'Connection' => 'upgrade',
             'Server'     => 'perl',
+            'Date'       => Time::Moment->now_utc->strftime("%a, %d %b %Y %H:%M:%S GMT"),
         );
         $output{'Sec-Websocket-Extensions'} = $hdr{sec_websocket_extensions};
         $output{'Sec-WebSocket-Accept'} = $response_key;
