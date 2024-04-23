@@ -19,6 +19,15 @@ field $http_version : reader : param = 'HTTP/1.1';
 field $status : reader : param = '101';
 field $msg : reader : param = 'Switching Protocols';
 
+my %OPCODE_BY_CODE = (
+    1 => 'text',
+    2 => 'binary',
+    8 => 'close',
+    9 => 'ping',
+    10 => 'pong',
+);
+my %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
+
 field $deflation;
 field $inflation;
 
