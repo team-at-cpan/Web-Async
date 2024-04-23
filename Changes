@@ -1,0 +1,5 @@
+
+Revision history for {{$dist->name}}
+
+{{$NEXT}}
+    Initial version for websocket + per-message compression support
