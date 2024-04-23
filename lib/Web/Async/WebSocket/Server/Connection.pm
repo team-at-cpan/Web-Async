@@ -56,10 +56,14 @@ field $inflation;
 
 field $ryu : param : reader;
 
+field $on_handshake_failure : param : reader = undef;
+
 # A Ryu::Source representing the messages received from the client
 field $incoming_frame : reader : param { $self->ryu->source }
 # A Ryu::Source representing the messages to be sent to the client
 field $outgoing_frame : reader : param { $self->ryu->source }
+# A Future which will resolve with an error if the handshake failed
+field $handshake_failure : reader = undef;
 
 # The IO::Async::Stream representing the network connection
 # to the client
@@ -73,7 +77,14 @@ method configure (%args) {
     $stream = delete $args{stream} if exists $args{stream};
     $server_name = delete $args{server_name} if exists $args{server_name};
     $maximum_payload_size = delete $args{maximum_payload_size} if exists $args{maximum_payload_size};
+    $on_handshake_failure = delete $args{on_handshake_failure} if exists $args{on_handshake_failure};
     return $self->next::method(%args);
+}
+
+method _add_to_loop ($loop) {
+    $on_handshake_failure //= async method ($stream, $error, @) {
+        await $stream->write("$http_version 400 $error\x0D\x0A\x0D\x0A");
+    };
 }
 
 method deflate ($data) {
@@ -157,56 +168,7 @@ async method handle_connection () {
         );
     } catch ($e) {
         $log->errorf('Failed - %s', $e);
-        # await $stream->write("$http_version 400 $e\x0D\x0A\x0D\x0A");
-        my $txt = <<'HTML';
-<!DOCTYPE html>
-<html>
- <body>
-  ws test
-  <script type="module">
-            const ws = new WebSocket('ws://localhost:7777/api');
-            ws.binaryType = 'blob';
-            ws.addEventListener('message', async (msg) => {
-                console.debug(msg);
-                try {
-                    if(msg.data instanceof Blob) {
-                        // await this.handle_binary(msg);
-                    } else {
-                        // await this.handle_json(msg);
-                    }
-                } catch(e) {
-                    console.log('failure on message handling - ', e);
-                }
-            });
-            ws.addEventListener('error', async (msg) => {
-                console.error('Websocket error received: ', msg);
-            });
-
-            ws.addEventListener('open', async (evt) => {
-                console.log(`Opened connection`);
-                const data = { };
-                setInterval(async () => {
-                    const len = 3 + parseInt(Math.random() * 100);
-                    let str = '';
-                    for(let i = 0; i < len; ++i) {
-                        str = str + String.fromCodePoint(32 + parseInt(Math.random() * 65502));
-                    }
-                    data[str] = Math.random();
-                    await ws.send(JSON.stringify(data));
-                }, 300);
-            });
-            ws.addEventListener('closed', async (evt) => {
-                console.log('Closed connection: ', evt);
-            });
-
-  </script>
- </body>
-</html>
-HTML
-        my $encoded = encode_utf8 $txt;
-        my $length = length($encoded);
-        await $stream->write("$http_version 200 OK\x0D\x0AConnection: close\x0D\x0AContent-Length: $length\x0D\x0AContent-Type: text/html\x0D\x0A\x0D\x0A" . $encoded . "\x0D\x0A");
-        $stream->close;
+        await $self->$on_handshake_failure($stream, $e);
         return;
     }
 

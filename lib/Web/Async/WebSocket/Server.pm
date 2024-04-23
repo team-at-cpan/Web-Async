@@ -26,8 +26,11 @@ field $port : reader : param = undef;
 
 field $incoming_client : reader : param = undef;
 
+field $on_handshake_failure : reader : param = undef;
+
 method configure (%args) {
     $port = delete $args{port} if exists $args{port};
+    $on_handshake_failure = delete $args{on_handshake_failure} if exists $args{on_handshake_failure};
     return $self->next::method(%args);
 }
 
@@ -58,6 +61,7 @@ method on_stream ($listener, $stream, @) {
         my $client = Web::Async::WebSocket::Server::Connection->new(
             stream => $stream,
             ryu    => $ryu,
+            on_handshake_failure => $on_handshake_failure,
         )
     );
     $incoming_client->emit($client);
