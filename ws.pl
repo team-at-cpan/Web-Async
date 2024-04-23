@@ -45,8 +45,14 @@ my %OPCODE_BY_CODE = (
 );
 my %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
 
+# Our current deflation (compression) state
 field $deflation;
+# Our current inflation (decompression) state
 field $inflation;
+
+field $incoming_frames : reader : param { $self->ryu->source }
+
+field $maximum_payload_size : reader : param;
 
 method deflate ($data) {
     $deflation //= deflateInit(
@@ -72,6 +78,9 @@ method inflate ($data) {
 }
 
 method _add_to_loop ($loop) {
+    $self->add_child(
+        $ryu = Ryu::Async->new
+    );
     $self->add_child(
         $srv = IO::Async::Listener->new(
             on_stream => $self->curry::weak::on_stream,
