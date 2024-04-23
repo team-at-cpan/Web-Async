@@ -4,6 +4,8 @@ use Myriad::Class extends => 'IO::Async::Notifier';
 
 use IO::Async::Listener;
 
+use Web::Async::WebSocket::Frame;
+
 use List::Util qw(pairmap);
 use Compress::Zlib;
 use POSIX ();
