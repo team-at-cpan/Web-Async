@@ -44,17 +44,34 @@ field $server_name : reader : param = 'perl';
 # Restriction on number of raw (pre-decompression!) bytes,
 # advised to set this to a nonzero value to avoid clients
 # burning up all your memory...
-field $maximum_payload_size : reader : param;
+field $maximum_payload_size : reader : param = undef;
 
 # Our current deflation (compression) state
 field $deflation;
 # Our current inflation (decompression) state
 field $inflation;
 
+field $ryu : param : reader;
+
 # A Ryu::Source representing the messages received from the client
-field $incoming_frames : reader : param { $self->ryu->source }
+field $incoming_frame : reader : param { $self->ryu->source }
 # A Ryu::Source representing the messages to be sent to the client
-field $outgoing_frames : reader : param { $self->ryu->source }
+field $outgoing_frame : reader : param { $self->ryu->source }
+
+# The IO::Async::Stream representing the network connection
+# to the client
+field $stream;
+
+method configure (%args) {
+    $http_version = delete $args{http_version} if exists $args{http_version};
+    $status = delete $args{status} if exists $args{status};
+    $msg = delete $args{msg} if exists $args{msg};
+    $ryu = delete $args{ryu} if exists $args{ryu};
+    $stream = delete $args{stream} if exists $args{stream};
+    $server_name = delete $args{server_name} if exists $args{server_name};
+    $maximum_payload_size = delete $args{maximum_payload_size} if exists $args{maximum_payload_size};
+    return $self->next::method(%args);
+}
 
 method deflate ($data) {
     $deflation //= deflateInit(
@@ -79,10 +96,10 @@ method inflate ($data) {
     return $block;
 }
 
-async method read_headers ($conn) {
+async method read_headers () {
     my %hdr;
     while(1) {
-        my $line = decode_utf8('' . await $conn->read_until("\x0D\x0A"));
+        my $line = decode_utf8('' . await $stream->read_until("\x0D\x0A"));
         $line =~ s/\x0D\x0A$//;
         last unless length $line;
 
@@ -98,12 +115,13 @@ method generate_response_key ($key) {
     return encode_base64(sha1($key . WEBSOCKET_GUID), '');
 }
 
-async method handle_connection ($conn) {
+async method handle_connection () {
     try {
-        my $first = await $conn->read_until("\x0D\x0A");
+        $self->add_child($stream);
+        my $first = await $stream->read_until("\x0D\x0A");
         my ($method, $url, $version) = $first =~ m{^(\S+)\s+(\S+)\s+(HTTP/\d+\.\d+)\x0D\x0A$}a;
         $log->tracef('HTTP request is [%s] for [%s] version %s', $method, $url, $version);
-        my $hdr = await $self->read_headers($conn);
+        my $hdr = await $self->read_headers();
 
         $log->tracef('url = %s, headers = %s', $url, format_json_text($hdr));
 
@@ -119,11 +137,11 @@ async method handle_connection ($conn) {
         );
         $output{'Sec-WebSocket-Accept'} = $self->generate_response_key($hdr->{sec_websocket_key});
 
-        my @extensions = grep { $supported_extension{$_} } map { /([^=]+)/ } split /\s*;\s*/, $hdr->{sec_websocket_extensions};
+        my @extensions = grep { $supported_extension->{$_} } map { /([^=]+)/ } split /\s*;\s*/, $hdr->{sec_websocket_extensions};
         $output{'Sec-Websocket-Extensions'} = join ';', sort @extensions;
 
         # Send the entire header block in a single write
-        await $conn->write(
+        await $stream->write(
             join(
                 "\x0D\x0A",
                 "$http_version $status $msg",
@@ -136,7 +154,7 @@ async method handle_connection ($conn) {
         );
     } catch ($e) {
         $log->errorf('Failed - %s', $e);
-        # await $conn->write("$http_version 400 $e\x0D\x0A\x0D\x0A");
+        # await $stream->write("$http_version 400 $e\x0D\x0A\x0D\x0A");
         my $txt = <<'HTML';
 <!DOCTYPE html>
 <html>
@@ -184,8 +202,8 @@ async method handle_connection ($conn) {
 HTML
         my $encoded = encode_utf8 $txt;
         my $length = length($encoded);
-        await $conn->write("$http_version 200 OK\x0D\x0AConnection: close\x0D\x0AContent-Length: $length\x0D\x0AContent-Type: text/html\x0D\x0A\x0D\x0A" . $encoded . "\x0D\x0A");
-        $conn->close;
+        await $stream->write("$http_version 200 OK\x0D\x0AConnection: close\x0D\x0AContent-Length: $length\x0D\x0AContent-Type: text/html\x0D\x0A\x0D\x0A" . $encoded . "\x0D\x0A");
+        $stream->close;
         return;
     }
 
@@ -193,23 +211,22 @@ HTML
     try {
         $log->tracef('Start reading frames');
         while(1) {
-            await $incoming_frames->unblocked;
-            my $frame = await $self->read_frame($conn);
+            await $incoming_frame->unblocked;
+            my $frame = await $self->read_frame();
             $log->tracef('Had frame: %s', $frame);
-            $incoming_frames->emit($frame);
+            $incoming_frame->emit($frame);
 #            await $self->write_frame(
-#                $conn,
 #                type    => 'text',
 #                payload => $payload
 #            );
         }
     } catch ($e) {
         $log->errorf('Problem, %s', $e);
-        $conn->close;
+        $stream->close;
     }
 }
 
-async method read_frame ($stream) {
+async method read_frame () {
     $log->tracef('Reading frames from %s', "$stream");
     my $fin;
     my $data = '';
@@ -272,7 +289,7 @@ async method read_frame ($stream) {
     );
 }
 
-async method write_frame ($stream, %args) {
+async method write_frame (%args) {
     my $compressed = $args{compress} // 1;
     $log->tracef('Write frame with %s', \%args);
     # FIN

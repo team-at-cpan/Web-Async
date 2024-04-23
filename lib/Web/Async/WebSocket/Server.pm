@@ -1,17 +1,27 @@
 package Web::Async::WebSocket::Server;
 use Myriad::Class extends => 'IO::Async::Notifier';
 
+use Ryu::Async;
 use IO::Async::Listener;
 
 use Web::Async::WebSocket::Server::Connection;
 
 field $srv;
-field $ryu;
+field $ryu : reader : param = undef;
+field $port : reader : param = undef;
+
+field $incoming_client : reader : param = undef;
+
+method configure (%args) {
+    $port = delete $args{port} if exists $args{port};
+    return $self->next::method(%args);
+}
 
 method _add_to_loop ($loop) {
     $self->add_child(
         $ryu = Ryu::Async->new
-    );
+    ) unless $ryu;
+    $incoming_client //= $self->ryu->source;
     $self->add_child(
         $srv = IO::Async::Listener->new(
             on_stream => $self->curry::weak::on_stream,
@@ -19,24 +29,27 @@ method _add_to_loop ($loop) {
     );
     $self->adopt_future(
         $srv->listen(
-            service  => 7777,
+            service  => $port,
             socktype => 'stream',
         )
     );
 }
 
-method on_stream ($listener, $conn, @) {
-    $log->tracef('Connection %s for listener %s', "$conn", "$listener");
-    $conn->configure(
+method on_stream ($listener, $stream, @) {
+    $log->tracef('Connection %s for listener %s', "$stream", "$listener");
+    $stream->configure(
         on_read => sub { 0 }
     );
-    $self->add_child($conn);
-    $self->adopt_future(
-        $self->handle_connection($conn)
+    $self->add_child(
+        my $client = Web::Async::WebSocket::Server::Connection->new(
+            stream => $stream,
+            ryu    => $ryu,
+        )
     );
-}
-
-async method handle_connection ($conn) {
+    $incoming_client->emit($client);
+    $self->adopt_future(
+        $client->handle_connection
+    );
 }
 
 1;
