@@ -36,6 +36,7 @@ field $server_name : reader : param = 'perl';
 
 # Opcodes have a registry here: https://www.iana.org/assignments/websocket/websocket.xhtml#opcode
 my %OPCODE_BY_CODE = (
+    0 => 'continuation',
     1 => 'text',
     2 => 'binary',
     8 => 'close',
