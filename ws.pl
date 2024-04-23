@@ -19,27 +19,29 @@ field $http_version : reader : param = 'HTTP/1.1';
 field $status : reader : param = '101';
 field $msg : reader : param = 'Switching Protocols';
 
+field $deflation;
+field $inflation;
+
 method deflate ($data) {
-    my $x = deflateInit(
+    $deflation //= deflateInit(
         -WindowBits => -MAX_WBITS
     ) or die "Cannot create a deflation stream\n" ;
 
-    my ($block, $status) = $x->deflate($data);
+    my ($output, $status) = $deflation->deflate($data);
     die "deflation failed\n" unless $status == Z_OK;
-    my $output = $block;
-    ($block, $status) = $x->flush(Z_SYNC_FLUSH);
+    (my $block, $status) = $deflation->flush(Z_SYNC_FLUSH);
     die "deflation failed at flush stage\n" unless $status == Z_OK;
 
     return $output . $block;
 }
 
 method inflate ($data) {
-    my $x = deflateInit(
+    $inflation //= inflateInit(
         -WindowBits => -MAX_WBITS
     ) or die "Cannot create a deflation stream\n" ;
 
-    my ($block, $status) = $x->inflate($data);
-    die "deflation failed\n" unless $status == Z_OK;
+    my ($block, $status) = $inflation->inflate($data);
+    die "deflation failed\n" unless $status == Z_STREAM_END or $status == Z_OK;
     return $block;
 }
 
