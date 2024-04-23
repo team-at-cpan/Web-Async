@@ -1,6 +1,9 @@
 package Web::Async::WebSocket::Server::Connection;
 use Myriad::Class extends => 'IO::Async::Notifier';
 
+## VERSION
+## AUTHORITY
+
 use Web::Async::WebSocket::Frame;
 
 use List::Util qw(pairmap);
