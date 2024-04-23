@@ -127,57 +127,97 @@ async method handle_connection ($conn) {
         );
     } catch ($e) {
         $log->errorf('Failed - %s', $e);
-        await $conn->write("$http_version 400 $e\x0D\x0A\x0D\x0A");
-    }
-}
+        # await $conn->write("$http_version 400 $e\x0D\x0A\x0D\x0A");
+        my $txt = <<'HTML';
+<!DOCTYPE html>
+<html>
+ <body>
+  ws test
+  <script type="module">
+            const ws = new WebSocket('ws://localhost:7777/api');
+            ws.binaryType = 'blob';
+            ws.addEventListener('message', async (msg) => {
+                console.debug(msg);
+                try {
+                    if(msg.data instanceof Blob) {
+                        // await this.handle_binary(msg);
+                    } else {
+                        // await this.handle_json(msg);
+                    }
+                } catch(e) {
+                    console.log('failure on message handling - ', e);
+                }
+            });
+            ws.addEventListener('error', async (msg) => {
+                console.error('Websocket error received: ', msg);
+            });
 
-method decode_frame ($frame) {
-    my ($opcode, $len) = unpack 'C1C1', substr $frame, 0, 2, '';
-    my $masked = $len & 0x80;
-    die 'unmasked frame' unless $masked;
-    $len &= ~0x80;
-    my $fin = ($opcode & 0x80) ? 1 : 0;
-    my @rsv = map { ($opcode & $_) ? 1 : 0 } 0x40, 0x20, 0x10;
-    if($len == 126) {
-        ($len) = unpack 'n1', substr $frame, 0, 2, '';
-        die 'invalid length' if $len < 126;
-    } elsif($len == 127) {
-        ($len) = unpack 'Q1', substr $frame, 0, 8, '';
-        die 'invalid length' if $len < 0xFFFF or $len & 0x80000000;
+            ws.addEventListener('open', async (evt) => {
+                console.log(`Opened connection`);
+                const data = { };
+                setInterval(async () => {
+                    const len = 3 + parseInt(Math.random() * 100);
+                    let str = '';
+                    for(let i = 0; i < len; ++i) {
+                        str = str + String.fromCodePoint(parseInt(Math.random() * 65535));
+                    }
+                    data[str] = Math.random();
+                    await ws.send(JSON.stringify(data));
+                }, 300);
+            });
+            ws.addEventListener('closed', async (evt) => {
+                console.log('Closed connection: ', evt);
+            });
+
+  </script>
+ </body>
+</html>
+HTML
+        my $encoded = encode_utf8 $txt;
+        my $length = length($encoded);
+        await $conn->write("$http_version 200 OK\x0D\x0AConnection: close\x0D\x0AContent-Length: $length\x0D\x0AContent-Type: text/html\x0D\x0A\x0D\x0A" . $encoded . "\x0D\x0A");
+        $conn->close;
+        return;
     }
-    my $mask = '';
-    if($masked) {
-        $mask = substr $frame, 0, 4, '';
+
+    # Body processing
+    try {
+        while(1) {
+            $log->infof('Start reading frames');
+            my $payload = await $self->read_frame($conn);
+            $log->infof('Had frame: %s', $payload);
+            await $self->write_frame(
+                $conn,
+                type    => 'text',
+                payload => $payload
+            );
+        }
+    } catch ($e) {
+        $log->errorf('Problem, %s', $e);
+        $conn->close;
     }
-    $log->infof(
-        'Frame opcode %d, length %d, fin = %s, rsv = %s %s %s, mask key %v0x',
-        $opcode,
-        $len,
-        $fin,
-        @rsv,
-        $mask
-    );
-    exit;
-    return {};
 }
 
 async method read_frame ($stream) {
+    $log->infof('Reading frames from %s', "$stream");
     my $fin;
     my $data = '';
     my $compressed;
+    my $type;
     do {
         my ($opcode, $len) = unpack 'C1C1', '' . await $stream->read_exactly(2);
         my $masked = $len & 0x80;
         die 'unmasked frame' unless $masked;
         $len &= ~0x80;
-        my $fin = ($opcode & 0x80) ? 1 : 0;
+        $fin = ($opcode & 0x80) ? 1 : 0;
         my @rsv = map { ($opcode & $_) ? 1 : 0 } 0x40, 0x20, 0x10;
         $compressed //= $rsv[0];
+        $type //= $opcode & 0x0F;
         if($len == 126) {
             ($len) = unpack 'n1', '' . await $stream->read_exactly(2);
             die 'invalid length' if $len < 126;
         } elsif($len == 127) {
-            ($len) = unpack 'Q1', '' . await $stream->read_exactly(8);
+            ($len) = unpack 'Q>1', '' . await $stream->read_exactly(8);
             die 'invalid length' if $len < 0xFFFF or $len & 0x80000000;
         }
         my $mask = '';
@@ -194,14 +234,54 @@ async method read_frame ($stream) {
         );
         my $payload = await $stream->read_exactly($len);
         if($masked) {
+            $log->infof('Masked payload = %v0x', $payload);
             my ($frac, $int) = POSIX::modf(length($payload) / 4);
             $payload ^.= ($mask x $int) . substr($mask, 0, 4 * $frac);
         }
-        $log->infof('Payload = %s', $payload);
+        $log->infof('Payload = %v0x', $payload);
         $data .= $payload;
     } until $fin;
-    return $data unless $compressed;
-    return scalar $self->deflate($payload . "\x00\x00\xFF\xFF");
+    $data = $self->inflate($data . "\x00\x00\xFF\xFF") if $compressed;
+    $log->infof('Frame opcode is %s', $OPCODE_BY_CODE{$type});
+    $data = decode_utf8($data) if $type == $OPCODE_BY_NAME{text};
+    $log->infof('Finished, data is now %s', $data);
+    return $data;
+}
+
+async method write_frame ($stream, %args) {
+    my $compressed = $args{compress} // 1;
+    $log->infof('Write frame with %s', \%args);
+    # FIN
+    my $opcode = $OPCODE_BY_NAME{$args{type}};
+    my $payload = $args{payload};
+    $payload = encode_utf8($payload) if $opcode == $OPCODE_BY_NAME{text};
+
+    $opcode |= 0x80;
+    if($compressed) {
+        $opcode |= 0x40;
+        my $original = length $payload;
+        $payload = $self->deflate($payload);
+        # Strip terminator if we have one
+        $payload =~ s{\x00\x00\xFF\xFF$}{};
+        $log->infof(
+            'Size after deflation is %d/%d, ratio of %4.1f%%',
+            length($payload),
+            $original,
+            100.0 * (length($payload) / $original),
+        );
+    }
+    my $len = length $payload;
+    my $msg = pack('C1', $opcode);
+    if($len < 126) {
+        $msg .= pack('C1', $len);
+    } elsif($len < 0xFFFF) {
+        $msg .= pack('C1n1', 126, $len);
+    } else {
+        $msg .= pack('C1Q>1', 127, $len);
+    }
+    $msg .= $payload;
+    await $stream->write($msg);
+    return;
 }
 
 }
