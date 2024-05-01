@@ -12,6 +12,7 @@ use POSIX ();
 use Time::Moment;
 use Digest::SHA qw(sha1);
 use MIME::Base64 qw(encode_base64);
+use Unicode::UTF8 qw(valid_utf8);
 
 # As defined in the RFC - it's used as part of the hashing for the security header in the response
 use constant WEBSOCKET_GUID => '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -391,7 +392,13 @@ async method read_frame () {
     } until $fin;
     $data = $self->inflate($data . "\x00\x00\xFF\xFF") if $compressed;
     $log->tracef('Frame opcode is %s', $OPCODE_BY_CODE{$type});
-    $data = decode_utf8($data) if $type == $OPCODE_BY_NAME{text};
+    if($type == $OPCODE_BY_NAME{text}) {
+        return await $self->close(
+            code   => 1002,
+            reason => 'Invalid UTF-8 data in text frame',
+        ) unless valid_utf8($data);
+        $data = decode_utf8($data);
+    }
     $log->tracef('Finished, data is now %s', $data);
     my $frame = Web::Async::WebSocket::Frame->new(
         payload => $data,
