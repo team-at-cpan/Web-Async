@@ -354,7 +354,15 @@ async method read_frame () {
         $len &= ~0x80;
         $fin = ($opcode & 0x80) ? 1 : 0;
         my @rsv = map { ($opcode & $_) ? 1 : 0 } 0x40, 0x20, 0x10;
-        $compressed //= $rsv[0];
+        $compressed //= $compression_options->{compress} && $rsv[0];
+        return await $self->close(
+            code => 1002,
+            reason => 'Reserved bit 0 set with compression disabled',
+        ) if $rsv[0] and not $compression_options->{compress};
+        return await $self->close(
+            code => 1002,
+            reason => 'Unexpected reserved bit set',
+        ) if any { $_ } @rsv;
         $type //= $opcode & 0x0F;
         if($len == 126) {
             ($chunk, $eof) = await $stream->read_exactly(2);
