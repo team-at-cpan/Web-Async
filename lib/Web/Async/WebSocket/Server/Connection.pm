@@ -314,6 +314,10 @@ async method handle_connection () {
         return;
     }
 
+    # Once the handshake is complete, we don't need the handler any more,
+    # and keeping it around could lead to unwanted refcount cycles
+    undef $on_handshake_failure;
+
     # Body processing
     try {
         $log->tracef('Start reading frames');
