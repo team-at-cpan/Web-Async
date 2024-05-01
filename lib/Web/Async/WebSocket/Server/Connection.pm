@@ -76,6 +76,8 @@ field $outgoing_frame : reader : param { $self->ryu->source }
 # A Future which will resolve with an error if the handshake failed
 field $handshake_failure : reader = undef;
 
+field $compression_options : reader { +{ } }
+
 # The IO::Async::Stream representing the network connection
 # to the client
 field $stream;
@@ -148,8 +150,9 @@ async method prepare_frames (%args) {
 }
 
 method deflate ($data) {
+    undef $deflation unless $compression_options->{server_context};
     $deflation //= deflateInit(
-        -WindowBits => -MAX_WBITS
+        -WindowBits => -($compression_options->{server_wbits} || 15)
     ) or die "Cannot create a deflation stream\n" ;
 
     my ($output, $status) = $deflation->deflate($data);
@@ -161,8 +164,9 @@ method deflate ($data) {
 }
 
 method inflate ($data) {
+    undef $inflation unless $compression_options->{cilent_context};
     $inflation //= inflateInit(
-        -WindowBits => -MAX_WBITS
+        -WindowBits => -($compression_options->{client_wbits} || 15)
     ) or die "Cannot create a deflation stream\n" ;
 
     my ($block, $status) = $inflation->inflate($data);
@@ -211,8 +215,45 @@ async method handle_connection () {
         );
         $output{'Sec-WebSocket-Accept'} = $self->generate_response_key($hdr->{sec_websocket_key});
 
-        my @extensions = grep { $supported_extension->{$_} } map { /([^=]+)/ } split /\s*;\s*/, $hdr->{sec_websocket_extensions} // '';
-        $output{'Sec-Websocket-Extensions'} = join ';', sort @extensions;
+        if(exists $hdr->{sec_websocket_extensions}) {
+            my $extensions;
+            VALID: {
+                SELECTION:
+                for my $selection (split /\s*,\s*/, $hdr->{sec_websocket_extensions} // '') {
+                    my @options = map {; /^(\S+)(?:\s*=\s*(.*)\s*)?$/ ? ($1, $2) : () } split /\s*;\s*/, $selection;
+                    my @order = pairmap { $a } @options;
+                    my %options = @options;
+                    my @invalid = grep { !$supported_extension->{$_} } sort keys %options;
+                    if(@invalid) {
+                        $log->infof('Rejecting invalid option combination %s', \@invalid);
+                        next SELECTION;
+                    }
+
+                    $log->infof('Acceptable options: %s', \%options);
+                    $options{client_max_window_bits} //= 15 if exists $options{client_max_window_bits};
+                    $compression_options->{client_bits} = $options{client_max_window_bits};
+                    $compression_options->{server_bits} = $options{server_max_window_bits} || 15;
+                    $extensions = join '; ', map { defined($options{$_}) ? "$_=$options{$_}" : $_ } @order;
+                    $compression_options->{server_context} = (exists $options{server_no_context_takeover}) ? 0 : 1;
+                    $compression_options->{client_context} = (exists $options{client_no_context_takeover}) ? 0 : 1;
+                    last VALID;
+                }
+                $log->infof('No acceptable extension options, giving up: %s', $hdr->{sec_websocket_extensions});
+                await $stream->write(
+                    join(
+                        "\x0D\x0A",
+                        "$http_version 400 No acceptable extensions",
+                        (pairmap {
+                            encode_utf8("$a: $b")
+                        } %output),
+                        # Blank line at the end of the headers
+                        '', ''
+                    )
+                );
+                die 'no acceptable extensions';
+            }
+            $output{'Sec-Websocket-Extensions'} = $extensions;
+        }
 
         # Send the entire header block in a single write
         await $stream->write(
