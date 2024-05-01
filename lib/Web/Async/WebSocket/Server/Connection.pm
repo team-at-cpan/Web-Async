@@ -435,6 +435,13 @@ async method close (%args) {
     # Can only close once
     return if $closed->is_ready;
 
+    # No point trying to write anything if the remote has closed the connection
+    if($stream->is_read_eof) {
+        $closed->done(%args);
+        $stream->close;
+        return;
+    }
+
     my $f = $self->write_frame(
         type    => 'close',
         payload => pack(
