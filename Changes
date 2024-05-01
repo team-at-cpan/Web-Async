@@ -2,6 +2,10 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+    [New features]
+
+    - better websocket protocol compatibility with other clients (mostly thanks to
+    Autobahn testing)
 
 0.001     2024-04-24 00:49:13+08:00 Asia/Singapore
     Initial version for websocket + per-message compression support
