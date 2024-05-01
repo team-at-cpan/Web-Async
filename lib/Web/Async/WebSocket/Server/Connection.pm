@@ -330,9 +330,9 @@ async method handle_connection () {
             $incoming_frame->emit($frame);
         }
     } catch ($e) {
-        $log->errorf('Problem, %s', $e);
+        $log->errorf('Problem, %s', $e) unless $e =~ /^EOF/;
         await $self->close(
-            code => 1011, # internal error
+            code   => 1011, # internal error
             reason => 'Internal error'
         );
     }
