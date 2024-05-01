@@ -27,6 +27,11 @@ our %OPCODE_BY_CODE = (
 );
 our %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
 
+our %COMPRESSIBLE_OPCODE = (
+    1 => 1,
+    2 => 1,
+);
+
 field $server : reader : param = undef;
 
 # Given the state of websockets in general, this is unlikely to change from `HTTP/1.1` anytime soon
@@ -104,9 +109,9 @@ async method write_frame (%args) {
 
 async method prepare_frames (%args) {
     my @frames;
-    my $compressed = $args{compress} // 1;
     $log->tracef('Write frame with %s', \%args);
     my $opcode = $OPCODE_BY_NAME{$args{type}};
+    my $compressed = ($args{compress} // 1) && $COMPRESSIBLE_OPCODE{$opcode};
     my $payload = $args{payload};
     $payload = encode_utf8($payload) if $opcode == $OPCODE_BY_NAME{text};
 
