@@ -180,10 +180,6 @@ async method handle_connection () {
             my $frame = await $self->read_frame();
             $log->tracef('Had frame: %s', $frame);
             $incoming_frame->emit($frame);
-#            await $self->write_frame(
-#                type    => 'text',
-#                payload => $payload
-#            );
         }
     } catch ($e) {
         $log->errorf('Problem, %s', $e);
