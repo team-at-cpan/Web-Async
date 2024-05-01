@@ -27,6 +27,8 @@ my %OPCODE_BY_CODE = (
 );
 my %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
 
+field $server : reader : param = undef;
+
 # Given the state of websockets in general, this is unlikely to change from `HTTP/1.1` anytime soon
 field $http_version : reader : param = 'HTTP/1.1';
 # 101 Upgrade is defined by the RFC, but if you have special requirements you can override via the constructor
