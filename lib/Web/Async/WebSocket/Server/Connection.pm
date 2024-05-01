@@ -82,6 +82,8 @@ field $compression_options : reader { +{ } }
 # to the client
 field $stream;
 
+field $closed : reader : param = undef;
+
 method configure (%args) {
     $http_version = delete $args{http_version} if exists $args{http_version};
     $status = delete $args{status} if exists $args{status};
@@ -107,6 +109,7 @@ Sends one or more frames to the client.
 =cut
 
 async method write_frame (%args) {
+    die 'already closed' if $closed->is_ready;
     for my $frame ($self->prepare_frames(%args)) {
         await $stream->write($frame);
     }
@@ -284,7 +287,7 @@ async method handle_connection () {
         }
     } catch ($e) {
         $log->errorf('Problem, %s', $e);
-        $stream->close;
+        await $self->close;
     }
 }
 
@@ -350,16 +353,34 @@ async method read_frame () {
         opcode => $type
     );
     if($OPCODE_BY_CODE{$type} eq 'close') {
-        if($server) {
-            $server->on_client_close($self, $frame);
-        }
-        await $self->write_frame(
-            type => 'close',
-            payload => $frame->payload,
+        my ($code, $reason) = unpack 'n1a*', $frame->payload;
+        my %args = (
+            code   => $code // 0,
+            reason => decode_utf8($reason // ''),
         );
-        $stream->close;
+        await $self->close(
+            %args
+        );
     }
     return $frame;
+}
+
+async method close (%args) {
+    # Can only close once
+    return if $closed->is_ready;
+
+    my $f = $self->write_frame(
+        type    => 'close',
+        payload => pack(
+            'n1a*' => $args{code} // 0, encode_utf8($args{reason} // '')
+        ),
+    );
+    if($server) {
+        $server->on_client_close($self, %args);
+    }
+    $closed->done(%args);
+    await $f;
+    $stream->close;
 }
 
 1;

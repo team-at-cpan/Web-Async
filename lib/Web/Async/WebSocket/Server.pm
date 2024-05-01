@@ -77,10 +77,10 @@ method on_stream ($listener, $stream, @) {
     );
 }
 
-method on_client_close ($client, $frame, @) {
+method on_client_close ($client, %args) {
     $closing_client->emit({
         client => $client,
-        frame  => $frame,
+        %args,
     });
     delete $active_client->{$client} or $log->errorf('Client %s was not recorded', "$client");
     return;
