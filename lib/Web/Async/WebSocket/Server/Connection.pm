@@ -17,7 +17,7 @@ use MIME::Base64 qw(encode_base64);
 use constant WEBSOCKET_GUID => '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 # Opcodes have a registry here: https://www.iana.org/assignments/websocket/websocket.xhtml#opcode
-my %OPCODE_BY_CODE = (
+our %OPCODE_BY_CODE = (
     0 => 'continuation',
     1 => 'text',
     2 => 'binary',
@@ -25,7 +25,7 @@ my %OPCODE_BY_CODE = (
     9 => 'ping',
     10 => 'pong',
 );
-my %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
+our %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
 
 field $server : reader : param = undef;
 
