@@ -19,18 +19,18 @@ use constant WEBSOCKET_GUID => '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 # Opcodes have a registry here: https://www.iana.org/assignments/websocket/websocket.xhtml#opcode
 our %OPCODE_BY_CODE = (
-    0 => 'continuation',
-    1 => 'text',
-    2 => 'binary',
-    8 => 'close',
-    9 => 'ping',
+    0  => 'continuation',
+    1  => 'text',
+    2  => 'binary',
+    8  => 'close',
+    9  => 'ping',
     10 => 'pong',
 );
 our %OPCODE_BY_NAME = reverse %OPCODE_BY_CODE;
 
 our %COMPRESSIBLE_OPCODE = (
-    1 => 1,
-    2 => 1,
+    $OPCODE_BY_NAME{text}   => 1,
+    $OPCODE_BY_NAME{binary} => 1,
 );
 
 field $server : reader : param = undef;
