@@ -44,7 +44,11 @@ field $msg : reader : param = 'Switching Protocols';
 # lists just two of 'em
 field $supported_extension : reader : param {
     +{
-        'permessage-deflate' => 1
+        'permessage-deflate' => 1,
+        'server_no_context_takeover' => 1,
+        'client_no_context_takeover' => 1,
+        'server_max_window_bits' => 1,
+        'client_max_window_bits' => 1,
     }
 }
 
