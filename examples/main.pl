@@ -56,11 +56,13 @@ HTML
 $srv->incoming_client->each(sub ($client, @) {
     $log->infof('Client: %s', "$client");
     $client->incoming_frame->map(async sub ($frame, @) {
-        $log->infof('Frame: %s', $frame->payload);
-        await $client->write_frame(
-            type    => 'text',
-            payload => $frame->payload
-        );
+        $log->infof('Frame %d with payload %d bytes', $frame->opcode, length $frame->payload);
+        if($frame->opcode == 1) {
+            await $client->write_frame(
+                type    => 'text',
+                payload => $frame->payload
+            );
+        }
     })->resolve->retain;
 });
 $loop->run;
