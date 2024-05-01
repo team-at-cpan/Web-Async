@@ -364,6 +364,10 @@ async method read_frame () {
             reason => 'Unexpected reserved bit set',
         ) if any { $_ } @rsv;
         $type //= $opcode & 0x0F;
+        return await $self->close(
+            code   => 1002,
+            reason => 'Unknown opcode',
+        ) unless $OPCODE_BY_CODE{$type};
         if($len == 126) {
             ($chunk, $eof) = await $stream->read_exactly(2);
             die "EOF\n" if $eof;
