@@ -98,6 +98,46 @@ method _add_to_loop ($loop) {
     $on_handshake_failure //= async method ($stream, $error, @) {
         await $stream->write("$http_version 400 $error\x0D\x0A\x0D\x0A");
     };
+    $closed //= $self->loop->new_future;
+    $stream->configure(
+        on_closed => $self->$curry::weak(async method (@) {
+            $closed->done unless $closed->is_ready;
+            $server->on_client_disconnect($self);
+        }),
+    );
+}
+
+=head2 send_text_frame
+
+Send a text frame.
+
+Expects a Unicode Perl text string as the first parameter - this will be
+encoded to UTF-8 and sent to the client.
+
+=cut
+
+async method send_text_frame ($text, %args) {
+    return await $self->write_frame(
+        payload => $text,
+        type => 'text',
+        %args
+    );
+}
+
+=head2 send_binary_frame
+
+Send a binary data frame.
+
+Expects the raw binary data bytes as the first parameter.
+
+=cut
+
+async method send_data_frame ($data, %args) {
+    return await $self->write_frame(
+        payload => $data,
+        type    => 'binary',
+        %args
+    );
 }
 
 =head2 write_frame
