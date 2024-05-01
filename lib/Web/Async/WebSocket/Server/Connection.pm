@@ -73,8 +73,6 @@ field $on_handshake_failure : param : reader = undef;
 field $incoming_frame : reader : param { $self->ryu->source }
 # A Ryu::Source representing the messages to be sent to the client
 field $outgoing_frame : reader : param { $self->ryu->source }
-# A Future which will resolve with an error if the handshake failed
-field $handshake_failure : reader = undef;
 
 field $compression_options : reader { +{ } }
 
