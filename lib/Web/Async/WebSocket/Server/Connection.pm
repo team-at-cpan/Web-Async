@@ -89,6 +89,55 @@ method _add_to_loop ($loop) {
     };
 }
 
+=head2 write_frame
+
+Sends one or more frames to the client.
+
+=cut
+
+async method write_frame (%args) {
+    for my $frame ($self->prepare_frames(%args)) {
+        await $stream->write($frame);
+    }
+    return;
+}
+
+async method prepare_frames (%args) {
+    my @frames;
+    my $compressed = $args{compress} // 1;
+    $log->tracef('Write frame with %s', \%args);
+    my $opcode = $OPCODE_BY_NAME{$args{type}};
+    my $payload = $args{payload};
+    $payload = encode_utf8($payload) if $opcode == $OPCODE_BY_NAME{text};
+
+    $opcode |= 0x80;
+    if($compressed) {
+        $opcode |= 0x40;
+        my $original = length $payload;
+        $payload = $self->deflate($payload);
+        # Strip terminator if we have one
+        $payload =~ s{\x00\x00\xFF\xFF$}{};
+        $log->tracef(
+            'Size after deflation is %d/%d, ratio of %4.1f%%',
+            length($payload),
+            $original,
+            100.0 * (length($payload) / ($original || 1)),
+        );
+    }
+    my $len = length $payload;
+    my $msg = pack('C1', $opcode);
+    if($len < 126) {
+        $msg .= pack('C1', $len);
+    } elsif($len < 0xFFFF) {
+        $msg .= pack('C1n1', 126, $len);
+    } else {
+        $msg .= pack('C1Q>1', 127, $len);
+    }
+    $msg .= $payload;
+    push @frames, $msg;
+    return @frames;
+}
+
 method deflate ($data) {
     $deflation //= deflateInit(
         -WindowBits => -MAX_WBITS
@@ -246,46 +295,21 @@ async method read_frame () {
     $log->tracef('Frame opcode is %s', $OPCODE_BY_CODE{$type});
     $data = decode_utf8($data) if $type == $OPCODE_BY_NAME{text};
     $log->tracef('Finished, data is now %s', $data);
-    return Web::Async::WebSocket::Frame->new(
+    my $frame = Web::Async::WebSocket::Frame->new(
         payload => $data,
         opcode => $type
     );
-}
-
-async method write_frame (%args) {
-    my $compressed = $args{compress} // 1;
-    $log->tracef('Write frame with %s', \%args);
-    # FIN
-    my $opcode = $OPCODE_BY_NAME{$args{type}};
-    my $payload = $args{payload};
-    $payload = encode_utf8($payload) if $opcode == $OPCODE_BY_NAME{text};
-
-    $opcode |= 0x80;
-    if($compressed) {
-        $opcode |= 0x40;
-        my $original = length $payload;
-        $payload = $self->deflate($payload);
-        # Strip terminator if we have one
-        $payload =~ s{\x00\x00\xFF\xFF$}{};
-        $log->tracef(
-            'Size after deflation is %d/%d, ratio of %4.1f%%',
-            length($payload),
-            $original,
-            100.0 * (length($payload) / $original),
+    if($OPCODE_BY_CODE{$type} eq 'close') {
+        if($server) {
+            $server->on_client_close($self, $frame);
+        }
+        await $self->write_frame(
+            type => 'close',
+            payload => $frame->payload,
         );
+        $stream->close;
     }
-    my $len = length $payload;
-    my $msg = pack('C1', $opcode);
-    if($len < 126) {
-        $msg .= pack('C1', $len);
-    } elsif($len < 0xFFFF) {
-        $msg .= pack('C1n1', 126, $len);
-    } else {
-        $msg .= pack('C1Q>1', 127, $len);
-    }
-    $msg .= $payload;
-    await $stream->write($msg);
-    return;
+    return $frame;
 }
 
 1;
