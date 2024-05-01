@@ -151,7 +151,7 @@ async method handle_connection () {
         );
         $output{'Sec-WebSocket-Accept'} = $self->generate_response_key($hdr->{sec_websocket_key});
 
-        my @extensions = grep { $supported_extension->{$_} } map { /([^=]+)/ } split /\s*;\s*/, $hdr->{sec_websocket_extensions};
+        my @extensions = grep { $supported_extension->{$_} } map { /([^=]+)/ } split /\s*;\s*/, $hdr->{sec_websocket_extensions} // '';
         $output{'Sec-Websocket-Extensions'} = join ';', sort @extensions;
 
         # Send the entire header block in a single write
