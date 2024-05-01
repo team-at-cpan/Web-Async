@@ -329,7 +329,10 @@ async method handle_connection () {
         }
     } catch ($e) {
         $log->errorf('Problem, %s', $e);
-        await $self->close;
+        await $self->close(
+            code => 1011, # internal error
+            reason => 'Internal error'
+        );
     }
 }
 
