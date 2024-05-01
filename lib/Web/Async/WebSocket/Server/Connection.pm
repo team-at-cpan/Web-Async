@@ -194,7 +194,7 @@ async method prepare_frames (%args) {
 method deflate ($data) {
     undef $deflation unless $compression_options->{server_context};
     $deflation //= deflateInit(
-        -WindowBits => -($compression_options->{server_wbits} || 15)
+        -WindowBits => -($compression_options->{server_bits} || 15)
     ) or die "Cannot create a deflation stream\n" ;
 
     my ($output, $status) = $deflation->deflate($data);
@@ -208,7 +208,7 @@ method deflate ($data) {
 method inflate ($data) {
     undef $inflation unless $compression_options->{cilent_context};
     $inflation //= inflateInit(
-        -WindowBits => -($compression_options->{client_wbits} || 15)
+        -WindowBits => -($compression_options->{client_bits} || 15)
     ) or die "Cannot create a deflation stream\n" ;
 
     my ($block, $status) = $inflation->inflate($data);
