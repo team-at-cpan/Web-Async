@@ -417,14 +417,14 @@ async method read_frame () {
         payload => $data,
         opcode => $type
     );
-    if($OPCODE_BY_CODE{$type} eq 'close') {
+    if($OPCODE_BY_CODE{$type} equ 'close') {
         my ($code, $reason) = unpack 'na*', $frame->payload;
         return await $self->close(
             code   => 1002,
             reason => 'Invalid UTF-8 reason in close frame',
         ) unless valid_utf8($reason);
         await $self->close(
-            code   => $code // 0,
+            code   => ($code || 0),
             reason => decode_utf8($reason // ''),
         );
     }
