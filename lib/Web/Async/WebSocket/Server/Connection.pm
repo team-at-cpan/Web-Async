@@ -158,7 +158,7 @@ async method write_frame (%args) {
 async method prepare_frames (%args) {
     my @frames;
     $log->tracef('Write frame with %s', \%args);
-    my $opcode = $OPCODE_BY_NAME{$args{type}};
+    my $opcode = $OPCODE_BY_NAME{$args{type}} // die 'invalid frame type';
     my $compressed = ($args{compress} // 1) && $compression_options->{compress} && $COMPRESSIBLE_OPCODE{$opcode};
     my $payload = $args{payload};
     $payload = encode_utf8($payload) if $opcode == $OPCODE_BY_NAME{text};
