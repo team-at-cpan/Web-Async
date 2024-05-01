@@ -180,7 +180,7 @@ async method prepare_frames (%args) {
     my $msg = pack('C1', $opcode);
     if($len < 126) {
         $msg .= pack('C1', $len);
-    } elsif($len < 0xFFFF) {
+    } elsif($len <= 0xFFFF) {
         $msg .= pack('C1n1', 126, $len);
     } else {
         $msg .= pack('C1Q>1', 127, $len);
