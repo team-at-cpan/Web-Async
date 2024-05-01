@@ -395,7 +395,7 @@ async method read_frame () {
         opcode => $type
     );
     if($OPCODE_BY_CODE{$type} eq 'close') {
-        my ($code, $reason) = unpack 'n1a*', $frame->payload;
+        my ($code, $reason) = unpack 'na*', $frame->payload;
         my %args = (
             code   => $code // 0,
             reason => decode_utf8($reason // ''),
@@ -414,7 +414,7 @@ async method close (%args) {
     my $f = $self->write_frame(
         type    => 'close',
         payload => pack(
-            'n1a*' => $args{code} // 0, encode_utf8($args{reason} // '')
+            'na*' => ($args{code} // 0), encode_utf8($args{reason} // '')
         ),
     );
     if($server) {
