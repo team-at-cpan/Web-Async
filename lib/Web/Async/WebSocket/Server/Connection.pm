@@ -159,7 +159,7 @@ async method prepare_frames (%args) {
     my @frames;
     $log->tracef('Write frame with %s', \%args);
     my $opcode = $OPCODE_BY_NAME{$args{type}};
-    my $compressed = ($args{compress} // 1) && $COMPRESSIBLE_OPCODE{$opcode};
+    my $compressed = ($args{compress} // 1) && $compression_options->{compress} && $COMPRESSIBLE_OPCODE{$opcode};
     my $payload = $args{payload};
     $payload = encode_utf8($payload) if $opcode == $OPCODE_BY_NAME{text};
 
@@ -278,6 +278,7 @@ async method handle_connection () {
                     $extensions = join '; ', map { defined($options{$_}) ? "$_=$options{$_}" : $_ } @order;
                     $compression_options->{server_context} = (exists $options{server_no_context_takeover}) ? 0 : 1;
                     $compression_options->{client_context} = (exists $options{client_no_context_takeover}) ? 0 : 1;
+                    $compression_options->{compress} = 1 if exists $options{'permessage-deflate'};
                     last VALID;
                 }
                 $log->infof('No acceptable extension options, giving up: %s', $hdr->{sec_websocket_extensions});
