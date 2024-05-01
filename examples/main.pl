@@ -10,7 +10,7 @@ binmode STDERR, ':encoding(UTF-8)';
 my $loop = IO::Async::Loop->new;
 $loop->add(
     my $srv = Web::Async::WebSocket::Server->new(
-        port => 7777,
+        port => 9001,
         on_handshake_failure => async sub ($client, $stream, @) {
             my $txt = <<'HTML';
 <!DOCTYPE html>
