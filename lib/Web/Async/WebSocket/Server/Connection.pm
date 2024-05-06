@@ -379,7 +379,7 @@ async method read_frame () {
         return await $self->close(
             code => 1002,
             reason => 'Unexpected reserved bit set',
-        ) if any { $_ } @rsv;
+        ) if any { $_ } @rsv[1..2];
         $type //= $opcode & 0x0F;
         return await $self->close(
             code   => 1002,
