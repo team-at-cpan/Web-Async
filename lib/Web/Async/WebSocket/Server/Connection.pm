@@ -259,6 +259,9 @@ async method handle_connection () {
         $uri->host($hdr->{host}) if exists $hdr->{host};
         $uri->path($url);
 
+        unless($hdr->{upgrade} =~ /^websocket$/i) {
+            die sprintf "No upgrade: websocket header, ignoring connection\n";
+        }
         unless($hdr->{sec_websocket_version} >= 13) {
             die sprintf "Invalid websocket version %s\n", $hdr->{sec_websocket_version};
         }
