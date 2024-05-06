@@ -215,7 +215,7 @@ method deflate ($data) {
 }
 
 method inflate ($data) {
-    undef $inflation unless $compression_options->{cilent_context};
+    undef $inflation unless $compression_options->{client_context};
     $inflation //= inflateInit(
         -WindowBits => -($compression_options->{client_bits} || 15)
     ) or die "Cannot create a deflation stream\n" ;
