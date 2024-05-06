@@ -10,6 +10,7 @@ use List::Util qw(pairmap);
 use Compress::Zlib;
 use POSIX ();
 use URI;
+use URI::ws;
 use Time::Moment;
 use Digest::SHA qw(sha1);
 use MIME::Base64 qw(encode_base64);
