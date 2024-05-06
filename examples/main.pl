@@ -18,7 +18,7 @@ $loop->add(
  <body>
   ws test
   <script type="module">
-const ws = new WebSocket('ws://localhost:7777/api');
+const ws = new WebSocket(`ws://${new URL(window.location.href).host}/api`);
 ws.addEventListener('message', (msg) => {
     console.debug('Websocket message: ', msg);
 });
