@@ -77,7 +77,12 @@ field $inflation;
 
 field $ryu : param : reader;
 
+# A coderef for processing requests before starting to accept traffic,
+# should return a failed Future if the connection should be rejected.
+field $handshake : param : reader = undef;
+
 field $on_handshake_failure : param : reader = undef;
+field $on_handshake_complete : reader = undef;
 
 # A Ryu::Source representing the messages received from the client
 field $incoming_frame : reader : param { $self->ryu->source }
@@ -101,6 +106,7 @@ method configure (%args) {
     $server_name = delete $args{server_name} if exists $args{server_name};
     $maximum_payload_size = delete $args{maximum_payload_size} if exists $args{maximum_payload_size};
     $on_handshake_failure = delete $args{on_handshake_failure} if exists $args{on_handshake_failure};
+    $handshake = delete $args{handshake} if exists $args{handshake};
     return $self->next::method(%args);
 }
 
@@ -109,6 +115,7 @@ method _add_to_loop ($loop) {
         await $stream->write("$http_version 400 $error\x0D\x0A\x0D\x0A");
     };
     $closed //= $self->loop->new_future;
+    $on_handshake_complete //= $self->loop->new_future;
     $stream->configure(
         on_closed => $self->$curry::weak(async method (@) {
             $closed->done unless $closed->is_ready;
@@ -310,9 +317,29 @@ async method handle_connection () {
                         '', ''
                     )
                 );
-                die 'no acceptable extensions';
+                die "no acceptable extensions\n";
             }
             $output{'Sec-Websocket-Extensions'} = $extensions;
+        }
+
+        try {
+            await $handshake->(
+                client           => $self,
+                response_headers => \%output,
+            ) if $handshake;
+        } catch ($e) {
+            await $stream->write(
+                join(
+                    "\x0D\x0A",
+                    "$http_version 400 Handshake rejected",
+                    (pairmap {
+                        encode_utf8("$a: $b")
+                    } %output),
+                    # Blank line at the end of the headers
+                    '', ''
+                )
+            );
+            die "handshake rejected\n";
         }
 
         # Send the entire header block in a single write
@@ -336,6 +363,7 @@ async method handle_connection () {
     # Once the handshake is complete, we don't need the handler any more,
     # and keeping it around could lead to unwanted refcount cycles
     undef $on_handshake_failure;
+    $on_handshake_complete->done;
 
     # Body processing
     try {
