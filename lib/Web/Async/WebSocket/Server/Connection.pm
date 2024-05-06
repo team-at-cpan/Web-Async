@@ -207,7 +207,7 @@ method deflate ($data) {
     ) or die "Cannot create a deflation stream\n" ;
 
     my ($output, $status) = $deflation->deflate($data);
-    die "deflation failed\n" unless $status == Z_OK;
+    die "deflation failed - $status\n" unless $status == Z_OK;
     (my $block, $status) = $deflation->flush(Z_SYNC_FLUSH);
     die "deflation failed at flush stage\n" unless $status == Z_OK;
 
@@ -221,7 +221,7 @@ method inflate ($data) {
     ) or die "Cannot create a deflation stream\n" ;
 
     my ($block, $status) = $inflation->inflate($data);
-    die "deflation failed\n" unless $status == Z_STREAM_END or $status == Z_OK;
+    die "inflation failed - $status\n" unless $status == Z_STREAM_END or $status == Z_OK;
     return $block;
 }
 
