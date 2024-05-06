@@ -2,6 +2,10 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+    [New features]
+
+    - provide accessors for the header, URL (plain text path for request) and full URI
+    for an incoming websocket client
 
 0.002     2024-05-02 03:52:14+08:00 Asia/Singapore
     [New features]

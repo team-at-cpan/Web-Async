@@ -9,6 +9,7 @@ use Web::Async::WebSocket::Frame;
 use List::Util qw(pairmap);
 use Compress::Zlib;
 use POSIX ();
+use URI;
 use Time::Moment;
 use Digest::SHA qw(sha1);
 use MIME::Base64 qw(encode_base64);
@@ -33,6 +34,9 @@ our %COMPRESSIBLE_OPCODE = (
     $OPCODE_BY_NAME{binary} => 1,
 );
 
+# Whether we're `ws` or `wss`
+field $scheme : reader : param = 'ws';
+# The Web::Async::WebSocket::Server instance
 field $server : reader : param = undef;
 
 # Given the state of websockets in general, this is unlikely to change from `HTTP/1.1` anytime soon
@@ -52,6 +56,11 @@ field $supported_extension : reader : param {
         'client_max_window_bits' => 1,
     }
 }
+
+field $method : reader = undef;
+field $url : reader = undef;
+field $uri : reader = undef;
+field $headers : reader { +{ } }
 
 # What to report in the `Server:` header
 field $server_name : reader : param = 'perl';
@@ -217,7 +226,6 @@ method inflate ($data) {
 }
 
 async method read_headers () {
-    my %hdr;
     while(1) {
         my $line = decode_utf8('' . await $stream->read_until("\x0D\x0A"));
         $line =~ s/\x0D\x0A$//;
@@ -225,9 +233,9 @@ async method read_headers () {
 
         my ($k, $v) = $line =~ /^([^:]+):\s+(.*)$/;
         $k = lc($k =~ tr{-}{_}r);
-        $hdr{$k} = $v;
+        $headers->{$k} = $v;
     }
-    return \%hdr;
+    return $headers;
 }
 
 method generate_response_key ($key) {
@@ -239,11 +247,17 @@ async method handle_connection () {
     try {
         $self->add_child($stream);
         my $first = await $stream->read_until("\x0D\x0A");
-        my ($method, $url, $version) = $first =~ m{^(\S+)\s+(\S+)\s+(HTTP/\d+\.\d+)\x0D\x0A$}a;
+        ($method, $url, my $version) = $first =~ m{^(\S+)\s+(\S+)\s+(HTTP/\d+\.\d+)\x0D\x0A$}a;
         $log->tracef('HTTP request is [%s] for [%s] version %s', $method, $url, $version);
         my $hdr = await $self->read_headers();
 
         $log->tracef('url = %s, headers = %s', $url, format_json_text($hdr));
+
+        # We rely on the caller to tell us the scheme, defaulting to plain `ws`,
+        # and everything else in the URI comes directly from the request.
+        $uri = URI->new($scheme . '://localhost');
+        $uri->host($hdr->{host}) if exists $hdr->{host};
+        $uri->path($url);
 
         unless($hdr->{sec_websocket_version} >= 13) {
             die sprintf "Invalid websocket version %s\n", $hdr->{sec_websocket_version};
