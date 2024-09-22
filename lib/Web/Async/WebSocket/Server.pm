@@ -10,8 +10,7 @@ Web::Async::WebSocket::Server - L<Future>-based web+HTTP handling
 
 =head1 DESCRIPTION
 
-Although other HTTP-adjacent protocols are planned, currently this only contains L<Web::Async::WebSocket::Server>,
-see documentation there for more details.
+Provides basic websocket server implementation.
 
 =cut
 
@@ -22,10 +21,39 @@ use Web::Async::WebSocket::Server::Connection;
 
 field $srv;
 field $ryu : reader : param = undef;
+
+=head1 METHODS
+
+=head2 port
+
+Returns the current listening port.
+
+=cut
+
 field $port : reader : param = undef;
 
+=head2 incoming_client
+
+A L<Ryu::Source> which emits an event every time a client connects.
+
+=cut
+
 field $incoming_client : reader : param = undef;
+
+=head2 disconnecting_client
+
+A L<Ryu::Source> which emits an event every time a client disconnects.
+
+=cut
+
 field $disconnecting_client : reader : param = undef;
+
+=head2 closing_client
+
+A L<Ryu::Source> which emits an event every time a client closes normally.
+
+=cut
+
 field $closing_client : reader : param = undef;
 field $active_client : reader { +{ } }
 
@@ -38,6 +66,9 @@ method configure (%args) {
     $port = delete $args{port} if exists $args{port};
     $on_handshake_failure = delete $args{on_handshake_failure} if exists $args{on_handshake_failure};
     $handshake = delete $args{handshake} if exists $args{handshake};
+    $incoming_client = delete $args{incoming_client} if exists $args{incoming_client};
+    $closing_client = delete $args{closing_client} if exists $args{closing_client};
+    $disconnecting_client = delete $args{disconnecting_client} if exists $args{disconnecting_client};
     return $self->next::method(%args);
 }
 
@@ -47,6 +78,7 @@ method _add_to_loop ($loop) {
     ) unless $ryu;
     $incoming_client //= $self->ryu->source;
     $closing_client //= $self->ryu->source;
+    $disconnecting_client //= $self->ryu->source;
     $self->add_child(
         $srv = IO::Async::Listener->new(
             on_stream => $self->curry::weak::on_stream,
