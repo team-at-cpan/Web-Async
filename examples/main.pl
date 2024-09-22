@@ -1,6 +1,5 @@
 #!/usr/bin/env perl
-use Myriad::Class;
-use Log::Any::Adapter 'Stderr', log_level => 'debug';
+use Full::Script qw(:v1);
 use IO::Async::Loop;
 
 use Web::Async::WebSocket::Server;

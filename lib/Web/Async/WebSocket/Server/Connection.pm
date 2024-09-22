@@ -1,5 +1,5 @@
 package Web::Async::WebSocket::Server::Connection;
-use Myriad::Class extends => 'IO::Async::Notifier';
+use Full::Class qw(:v1), extends => 'IO::Async::Notifier';
 
 ## VERSION
 ## AUTHORITY

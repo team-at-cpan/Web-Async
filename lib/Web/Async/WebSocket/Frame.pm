@@ -1,5 +1,5 @@
 package Web::Async::WebSocket::Frame;
-use Myriad::Class;
+use Full::Class qw(:v1);
 
 ## VERSION
 ## AUTHORITY
