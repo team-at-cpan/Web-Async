@@ -1,7 +1,7 @@
 package Web::Async;
 # ABSTRACT: Future-based web+HTTP handling
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 ## AUTHORITY
 
 =head1 NAME
