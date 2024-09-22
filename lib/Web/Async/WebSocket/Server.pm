@@ -123,7 +123,9 @@ method on_client_close ($client, %args) {
 }
 
 method on_client_disconnect ($client, @) {
-    $disconnecting_client->emit($client);
+    $disconnecting_client->emit({
+        client => $client
+    });
     delete $active_client->{$client} or $log->errorf('Client %s was not recorded', "$client");
     return;
 }
