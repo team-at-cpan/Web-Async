@@ -2,6 +2,8 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+
+0.005     2024-09-22 22:33:02+08:00 Asia/Singapore
     [Bugs fixed]
 
     - sources for closing and disconnecting clients can be passed as parameters
