@@ -482,6 +482,10 @@ async method close (%args) {
     # Can only close once
     return if $closed->is_ready;
 
+    if($server) {
+        $server->on_client_close($self, %args);
+    }
+
     # No point trying to write anything if the remote has closed the connection
     if($stream->is_read_eof) {
         $closed->done(%args);
@@ -495,9 +499,6 @@ async method close (%args) {
             'na*' => ($args{code} // 0), encode_utf8($args{reason} // '')
         ),
     );
-    if($server) {
-        $server->on_client_close($self, %args);
-    }
     $closed->done(%args);
     await $f;
     $stream->close;
