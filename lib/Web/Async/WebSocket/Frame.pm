@@ -1,7 +1,7 @@
 package Web::Async::WebSocket::Frame;
 use Myriad::Class;
 
-our $VERSION = '0.004'; ## VERSION
+our $VERSION = '0.005'; ## VERSION
 ## AUTHORITY
 
 field $opcode : reader : param;
