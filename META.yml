@@ -28,20 +28,20 @@ no_index:
 provides:
   Web::Async:
     file: lib/Web/Async.pm
-    version: '0.005'
+    version: '0.006'
   Web::Async::WebSocket::Frame:
     file: lib/Web/Async/WebSocket/Frame.pm
-    version: '0.005'
+    version: '0.006'
   Web::Async::WebSocket::Server:
     file: lib/Web/Async/WebSocket/Server.pm
-    version: '0.005'
+    version: '0.006'
   Web::Async::WebSocket::Server::Connection:
     file: lib/Web/Async/WebSocket/Server/Connection.pm
-    version: '0.005'
+    version: '0.006'
 requires:
   Compress::Zlib: '0'
+  Full::Class: '0'
   Log::Any: '0'
-  Myriad::Class: '0'
   POSIX: '0'
   Ryu::Async: '0'
   Time::Moment: '0'
@@ -52,7 +52,7 @@ resources:
   bugtracker: https://github.com/team-at-cpan/Web-Async/issues
   homepage: https://github.com/team-at-cpan/Web-Async
   repository: https://github.com/team-at-cpan/Web-Async.git
-version: '0.005'
+version: '0.006'
 x_authority: cpan:TEAM
 x_contributors:
   - 'Tom Molesworth <tom@audioboundary.com>'

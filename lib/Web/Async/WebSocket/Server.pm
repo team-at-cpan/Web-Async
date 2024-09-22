@@ -1,7 +1,7 @@
 package Web::Async::WebSocket::Server;
-use Myriad::Class extends => 'IO::Async::Notifier';
+use Full::Class qw(:v1), extends => 'IO::Async::Notifier';
 
-our $VERSION = '0.005'; ## VERSION
+our $VERSION = '0.006'; ## VERSION
 ## AUTHORITY
 
 =head1 NAME
@@ -97,15 +97,16 @@ method on_stream ($listener, $stream, @) {
     $stream->configure(
         on_read => sub { 0 }
     );
-    $self->add_child(
-        my $client = Web::Async::WebSocket::Server::Connection->new(
-            stream               => $stream,
-            ryu                  => $ryu,
-            handshake            => $handshake,
-            on_handshake_failure => $on_handshake_failure,
-        )
+    my $client = Web::Async::WebSocket::Server::Connection->new(
+        server               => $self,
+        stream               => $stream,
+        ryu                  => $ryu,
+        handshake            => $handshake,
+        on_handshake_failure => $on_handshake_failure,
     );
     $active_client->{$client} = $client;
+    $log->infof('Client %s recorded', "$client");
+    $self->add_child($client);
     $incoming_client->emit($client);
     $self->adopt_future(
         $client->handle_connection
@@ -117,12 +118,13 @@ method on_client_close ($client, %args) {
         client => $client,
         %args,
     });
-    delete $active_client->{$client} or $log->errorf('Client %s was not recorded', "$client");
     return;
 }
 
 method on_client_disconnect ($client, @) {
-    $disconnecting_client->emit($client);
+    $disconnecting_client->emit({
+        client => $client
+    });
     delete $active_client->{$client} or $log->errorf('Client %s was not recorded', "$client");
     return;
 }
