@@ -2,6 +2,12 @@
 Revision history for {{$dist->name}}
 
 {{$NEXT}}
+    [Bugs fixed]
+
+    - make disconnect/close events consistent with each other (hashref with `client`
+    key for the connection instance)
+    - avoid spurious warning when removing active entry on a disconnect after a close
+    frame
 
 0.005     2024-09-22 22:33:02+08:00 Asia/Singapore
     [Bugs fixed]
