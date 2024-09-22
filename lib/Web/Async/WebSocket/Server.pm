@@ -118,7 +118,6 @@ method on_client_close ($client, %args) {
         client => $client,
         %args,
     });
-    delete $active_client->{$client} or $log->errorf('Client %s was not recorded', "$client");
     return;
 }
 
