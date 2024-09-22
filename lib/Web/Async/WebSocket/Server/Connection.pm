@@ -104,6 +104,7 @@ method configure (%args) {
     $msg = delete $args{msg} if exists $args{msg};
     $ryu = delete $args{ryu} if exists $args{ryu};
     $stream = delete $args{stream} if exists $args{stream};
+    weaken($server = delete $args{server}) if exists $args{server};
     $server_name = delete $args{server_name} if exists $args{server_name};
     $maximum_payload_size = delete $args{maximum_payload_size} if exists $args{maximum_payload_size};
     $on_handshake_failure = delete $args{on_handshake_failure} if exists $args{on_handshake_failure};

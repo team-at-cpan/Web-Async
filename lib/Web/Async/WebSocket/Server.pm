@@ -99,6 +99,7 @@ method on_stream ($listener, $stream, @) {
     );
     $self->add_child(
         my $client = Web::Async::WebSocket::Server::Connection->new(
+            server               => $self,
             stream               => $stream,
             ryu                  => $ryu,
             handshake            => $handshake,
