@@ -97,16 +97,16 @@ method on_stream ($listener, $stream, @) {
     $stream->configure(
         on_read => sub { 0 }
     );
-    $self->add_child(
-        my $client = Web::Async::WebSocket::Server::Connection->new(
-            server               => $self,
-            stream               => $stream,
-            ryu                  => $ryu,
-            handshake            => $handshake,
-            on_handshake_failure => $on_handshake_failure,
-        )
+    my $client = Web::Async::WebSocket::Server::Connection->new(
+        server               => $self,
+        stream               => $stream,
+        ryu                  => $ryu,
+        handshake            => $handshake,
+        on_handshake_failure => $on_handshake_failure,
     );
     $active_client->{$client} = $client;
+    $log->infof('Client %s recorded', "$client");
+    $self->add_child($client);
     $incoming_client->emit($client);
     $self->adopt_future(
         $client->handle_connection
